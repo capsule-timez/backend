@@ -1,0 +1,12 @@
+// A URL de conexao nao fica aqui: no Prisma 7 ela e lida de DATABASE_URL em
+// prisma.config.ts (CLI) e passada ao driver adapter em src/lib/prisma.ts (runtime).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

@@ -6,6 +6,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   API_PREFIX: z.string().startsWith('/').default('/api'),
 
+  DATABASE_URL: z
+    .string()
+    .regex(/^postgres(ql)?:\/\//, 'deve comecar com postgresql:// ou postgres://'),
+
   // Infraestrutura local (docker-compose). Opcionais enquanto a API ainda nao
   // se conecta a esses servicos.
   POSTGRES_DB: z.string().optional(),
