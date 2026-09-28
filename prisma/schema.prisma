@@ -10,3 +10,62 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum CapsuleStatus {
+  SCHEDULED
+  SENT
+  FAILED
+
+  @@map("capsule_status")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  email     String   @unique
+  passhash  String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  capsules Capsule[]
+
+  @@map("users")
+}
+
+model Capsule {
+  id             String        @id @default(uuid()) @db.Uuid
+  creatorId      String        @map("id_creator") @db.Uuid
+  titleContent   String        @map("title_content")
+  textContent    String        @map("text_content")
+  recipientEmail String        @map("recipient_email")
+  scheduleDate   DateTime      @map("schedule_date")
+  status         CapsuleStatus @default(SCHEDULED)
+  // Identifica a capsula no link de acesso enviado ao destinatario.
+  token          String        @unique
+  sentAt         DateTime?     @map("sent_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  creator User          @relation(fields: [creatorId], references: [id])
+  files   CapsuleFile[]
+
+  // Atende a busca do job de entrega: capsulas SCHEDULED com schedule_date vencida.
+  @@index([status, scheduleDate])
+  @@index([creatorId])
+  @@map("capsules")
+}
+
+model CapsuleFile {
+  id        String   @id @default(uuid()) @db.Uuid
+  capsuleId String   @map("id_capsule") @db.Uuid
+  mimeType  String   @map("mime_type")
+  fileName  String   @map("file_name")
+  // Tamanho em bytes.
+  fileSize  Int      @map("file_size")
+  // Chave do objeto no bucket do MinIO.
+  objectKey String   @unique @map("object_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  capsule Capsule @relation(fields: [capsuleId], references: [id], onDelete: Cascade)
+
+  @@index([capsuleId])
+  @@map("capsule_files")
+}
