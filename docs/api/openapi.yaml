@@ -1,0 +1,1158 @@
+openapi: 3.1.0
+
+info:
+  title: Capsula API
+  version: 1.0.0
+  summary: Contrato HTTP da API da Capsula (autenticacao e capsulas do tempo).
+  description: |
+    Fonte da verdade do contrato entre backend e aplicativo. O guia legivel,
+    com convencoes e fluxo de autenticacao, esta em `docs/api/README.md`.
+
+    Convencoes gerais:
+
+    - JSON em camelCase, `Content-Type: application/json; charset=utf-8`.
+    - Datas em ISO 8601 **UTC** com sufixo `Z` (ex.: `2026-09-28T18:59:12.000Z`).
+      Respostas sempre trazem milissegundos; requisicoes com outro fuso ou sem
+      fuso sao rejeitadas com `422 VALIDATION_ERROR`.
+    - IDs sao UUID v4.
+    - Rotas de negocio ficam sob o prefixo `/api` (variavel `API_PREFIX`);
+      `/health` fica na raiz.
+    - Erros seguem sempre o schema `Error`.
+  contact:
+    name: capsule-timez
+    url: https://github.com/capsule-timez/backend
+  license:
+    name: ISC
+    identifier: ISC
+
+servers:
+  - url: http://localhost:3000
+    description: Backend local (npm run dev)
+  - url: http://localhost:4010
+    description: Mock gerado a partir deste contrato (npm run docs:mock)
+
+tags:
+  - name: Health
+    description: Verificacao de disponibilidade.
+  - name: Auth
+    description: Cadastro, login e ciclo de vida dos tokens.
+  - name: Capsules
+    description: Capsulas do usuario autenticado.
+  - name: Files
+    description: Anexos das capsulas.
+  - name: Public
+    description: Acesso do destinatario pelo link recebido por e-mail.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Status da API
+      security: []
+      responses:
+        '200':
+          description: API no ar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              examples:
+                ok:
+                  value:
+                    status: ok
+                    environment: development
+                    version: 0.1.0
+                    uptime: 12
+                    timestamp: '2026-09-28T18:59:12.000Z'
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      operationId: register
+      summary: Cria uma conta e ja devolve os tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              valid:
+                value:
+                  name: Maria Souza
+                  email: maria@exemplo.com
+                  password: senhaSegura123
+      responses:
+        '201':
+          description: Conta criada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                created:
+                  $ref: '#/components/examples/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: E-mail ja cadastrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                emailAlreadyInUse:
+                  value:
+                    status: error
+                    code: EMAIL_ALREADY_IN_USE
+                    message: E-mail ja cadastrado
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Autentica com e-mail e senha
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              valid:
+                value:
+                  email: maria@exemplo.com
+                  password: senhaSegura123
+      responses:
+        '200':
+          description: Autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                success:
+                  $ref: '#/components/examples/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: E-mail ou senha incorretos (a resposta nao indica qual).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidCredentials:
+                  value:
+                    status: error
+                    code: INVALID_CREDENTIALS
+                    message: E-mail ou senha invalidos
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshTokens
+      summary: Troca um refresh token por um novo par de tokens
+      description: |
+        O refresh token enviado e revogado e um novo e devolvido (rotacao).
+        Reutilizar um refresh token ja trocado resulta em `401 UNAUTHORIZED`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            examples:
+              valid:
+                value:
+                  refreshToken: rt_9f3c1a2b7d8e4f60a1b2c3d4e5f60718
+      responses:
+        '200':
+          description: Novo par de tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokens'
+              examples:
+                success:
+                  $ref: '#/components/examples/AuthTokens'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Refresh token invalido, expirado ou ja utilizado. O cliente deve voltar ao login.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                invalidRefreshToken:
+                  value:
+                    status: error
+                    code: UNAUTHORIZED
+                    message: Refresh token invalido ou expirado
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Revoga um refresh token
+      description: Idempotente. Um token desconhecido ou ja revogado tambem retorna `204`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            examples:
+              valid:
+                value:
+                  refreshToken: rt_9f3c1a2b7d8e4f60a1b2c3d4e5f60718
+      responses:
+        '204':
+          description: Token revogado.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      operationId: getMe
+      summary: Dados do usuario autenticado
+      responses:
+        '200':
+          description: Usuario autenticado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+              examples:
+                user:
+                  $ref: '#/components/examples/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/capsules:
+    get:
+      tags: [Capsules]
+      operationId: listCapsules
+      summary: Lista as capsulas do usuario
+      description: Ordenadas por `scheduleDate` crescente.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/CapsuleStatus'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Pagina de capsulas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapsuleList'
+              examples:
+                page:
+                  value:
+                    data:
+                      - id: 3f1e2d4c-5b6a-4789-9abc-def012345678
+                        title: Para mim daqui a um ano
+                        recipientEmail: maria@exemplo.com
+                        scheduleDate: '2027-09-28T12:00:00.000Z'
+                        status: SCHEDULED
+                        sentAt: null
+                        createdAt: '2026-09-28T18:59:12.000Z'
+                        fileCount: 1
+                      - id: 7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+                        title: Formatura
+                        recipientEmail: joao@exemplo.com
+                        scheduleDate: '2026-09-20T09:00:00.000Z'
+                        status: SENT
+                        sentAt: '2026-09-20T09:00:05.123Z'
+                        createdAt: '2026-01-15T14:30:00.000Z'
+                        fileCount: 0
+                    meta:
+                      page: 1
+                      pageSize: 20
+                      total: 2
+                      totalPages: 1
+                empty:
+                  value:
+                    data: []
+                    meta:
+                      page: 1
+                      pageSize: 20
+                      total: 0
+                      totalPages: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Capsules]
+      operationId: createCapsule
+      summary: Cria uma capsula agendada
+      description: A capsula nasce com `status` `SCHEDULED` e sem anexos. Anexos sao enviados depois em `POST /api/capsules/{id}/files`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCapsuleRequest'
+            examples:
+              valid:
+                value:
+                  title: Para mim daqui a um ano
+                  text: Lembra do que voce prometeu hoje?
+                  recipientEmail: maria@exemplo.com
+                  scheduleDate: '2027-09-28T12:00:00.000Z'
+      responses:
+        '201':
+          description: Capsula criada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capsule'
+              examples:
+                created:
+                  value:
+                    id: 3f1e2d4c-5b6a-4789-9abc-def012345678
+                    title: Para mim daqui a um ano
+                    text: Lembra do que voce prometeu hoje?
+                    recipientEmail: maria@exemplo.com
+                    scheduleDate: '2027-09-28T12:00:00.000Z'
+                    status: SCHEDULED
+                    sentAt: null
+                    createdAt: '2026-09-28T18:59:12.000Z'
+                    files: []
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/capsules/{id}:
+    parameters:
+      - $ref: '#/components/parameters/CapsuleId'
+    get:
+      tags: [Capsules]
+      operationId: getCapsule
+      summary: Detalha uma capsula do usuario
+      responses:
+        '200':
+          description: Capsula encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capsule'
+              examples:
+                capsuleScheduled:
+                  $ref: '#/components/examples/CapsuleScheduled'
+                capsuleSent:
+                  $ref: '#/components/examples/CapsuleSent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/CapsuleNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [Capsules]
+      operationId: updateCapsule
+      summary: Altera uma capsula ainda agendada
+      description: Envie so os campos que mudam. Permitido apenas com `status` `SCHEDULED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCapsuleRequest'
+            examples:
+              reschedule:
+                value:
+                  scheduleDate: '2028-01-01T00:00:00.000Z'
+      responses:
+        '200':
+          description: Capsula atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capsule'
+              examples:
+                updated:
+                  $ref: '#/components/examples/CapsuleScheduled'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/CapsuleNotFound'
+        '409':
+          $ref: '#/components/responses/CapsuleNotEditable'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Capsules]
+      operationId: deleteCapsule
+      summary: Exclui uma capsula ainda agendada
+      description: Remove tambem os anexos. Permitido apenas com `status` `SCHEDULED`.
+      responses:
+        '204':
+          description: Capsula excluida.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/CapsuleNotFound'
+        '409':
+          $ref: '#/components/responses/CapsuleNotEditable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/capsules/{id}/files:
+    parameters:
+      - $ref: '#/components/parameters/CapsuleId'
+    post:
+      tags: [Files]
+      operationId: uploadCapsuleFile
+      summary: Anexa um arquivo a uma capsula agendada
+      description: |
+        Um arquivo por requisicao, no campo `file`. Limites: 10 MB por arquivo e
+        5 arquivos por capsula. Tipos aceitos: `image/jpeg`, `image/png`,
+        `image/webp`, `video/mp4`, `audio/mpeg`, `application/pdf`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Conteudo do arquivo. O nome original e o MIME vem do proprio part.
+      responses:
+        '201':
+          description: Arquivo anexado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapsuleFile'
+              examples:
+                created:
+                  $ref: '#/components/examples/CapsuleFile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/CapsuleNotFound'
+        '409':
+          description: Capsula nao esta mais agendada ou ja tem 5 arquivos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                capsuleNotEditable:
+                  $ref: '#/components/examples/CapsuleNotEditableError'
+                fileLimitReached:
+                  value:
+                    status: error
+                    code: FILE_LIMIT_REACHED
+                    message: A capsula ja possui o limite de 5 arquivos
+        '413':
+          description: Arquivo acima de 10 MB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                fileTooLarge:
+                  value:
+                    status: error
+                    code: FILE_TOO_LARGE
+                    message: O arquivo excede o limite de 10 MB
+        '415':
+          description: Tipo de arquivo nao permitido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                unsupportedMediaType:
+                  value:
+                    status: error
+                    code: UNSUPPORTED_MEDIA_TYPE
+                    message: Tipo de arquivo nao permitido
+                    details:
+                      - field: file
+                        message: 'Tipos aceitos: image/jpeg, image/png, image/webp, video/mp4, audio/mpeg, application/pdf'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/capsules/{id}/files/{fileId}:
+    parameters:
+      - $ref: '#/components/parameters/CapsuleId'
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/Uuid'
+    delete:
+      tags: [Files]
+      operationId: deleteCapsuleFile
+      summary: Remove um anexo de uma capsula agendada
+      responses:
+        '204':
+          description: Anexo removido.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Capsula ou arquivo inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                fileNotFound:
+                  value:
+                    status: error
+                    code: NOT_FOUND
+                    message: Arquivo nao encontrado
+        '409':
+          $ref: '#/components/responses/CapsuleNotEditable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/public/capsules/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: Token do link enviado por e-mail ao destinatario.
+        schema:
+          type: string
+          minLength: 1
+        example: tk_5d41402abc4b2a76b9719d911017c592
+    get:
+      tags: [Public]
+      operationId: getPublicCapsule
+      summary: Abre a capsula entregue ao destinatario
+      description: Nao exige autenticacao. So responde `200` se a capsula ja estiver `SENT`; caso contrario retorna `404`, igual a um token inexistente.
+      security: []
+      responses:
+        '200':
+          description: Capsula entregue.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCapsule'
+              examples:
+                delivered:
+                  value:
+                    title: Formatura
+                    text: Parabens pela conquista! Guardei isso para hoje.
+                    creatorName: Maria Souza
+                    sentAt: '2026-09-20T09:00:05.123Z'
+                    files:
+                      - id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e
+                        fileName: foto-turma.jpg
+                        mimeType: image/jpeg
+                        fileSize: 482133
+                        createdAt: '2026-01-15T14:31:10.000Z'
+                        downloadUrl: http://localhost:9000/capsula/capsules/7a8b9c0d/foto-turma.jpg?X-Amz-Signature=abc123
+                        downloadUrlExpiresAt: '2026-09-28T19:59:12.000Z'
+        '404':
+          $ref: '#/components/responses/CapsuleNotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token devolvido por login, register ou refresh. Validade de 15 minutos.
+
+  parameters:
+    CapsuleId:
+      name: id
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Uuid'
+      example: 3f1e2d4c-5b6a-4789-9abc-def012345678
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+      examples: [3f1e2d4c-5b6a-4789-9abc-def012345678]
+
+    UtcDateTime:
+      type: string
+      format: date-time
+      description: ISO 8601 em UTC com sufixo `Z`. Respostas sempre trazem milissegundos.
+      pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$'
+      examples: ['2026-09-28T18:59:12.000Z']
+
+    Health:
+      type: object
+      required: [status, environment, version, uptime, timestamp]
+      properties:
+        status:
+          type: string
+          const: ok
+        environment:
+          type: string
+          enum: [development, test, production]
+        version:
+          type: string
+        uptime:
+          type: integer
+          description: Segundos desde que o processo subiu.
+        timestamp:
+          $ref: '#/components/schemas/UtcDateTime'
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: Normalizado para minusculas pelo backend.
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+          writeOnly: true
+
+    RefreshRequest:
+      type: object
+      additionalProperties: false
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+
+    User:
+      type: object
+      required: [id, name, email, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          $ref: '#/components/schemas/UtcDateTime'
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+          description: "JWT enviado no header `Authorization: Bearer <token>`."
+        refreshToken:
+          type: string
+          description: Token opaco com validade de 30 dias, de uso unico.
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          description: Segundos ate o access token expirar.
+          examples: [900]
+
+    AuthResponse:
+      type: object
+      required: [user, tokens]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        tokens:
+          $ref: '#/components/schemas/AuthTokens'
+
+    CapsuleStatus:
+      type: string
+      enum: [SCHEDULED, SENT, FAILED]
+      description: |
+        - `SCHEDULED`: aguardando a data de entrega; pode ser editada ou excluida.
+        - `SENT`: e-mail entregue ao destinatario (`sentAt` preenchido).
+        - `FAILED`: a entrega falhou.
+
+    CapsuleTitle:
+      type: string
+      minLength: 1
+      maxLength: 120
+
+    CapsuleText:
+      type: string
+      minLength: 1
+      maxLength: 10000
+
+    CreateCapsuleRequest:
+      type: object
+      additionalProperties: false
+      required: [title, text, recipientEmail, scheduleDate]
+      properties:
+        title:
+          $ref: '#/components/schemas/CapsuleTitle'
+        text:
+          $ref: '#/components/schemas/CapsuleText'
+        recipientEmail:
+          type: string
+          format: email
+          maxLength: 254
+        scheduleDate:
+          allOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+          description: Data de entrega. Deve estar pelo menos 1 minuto no futuro.
+
+    UpdateCapsuleRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          $ref: '#/components/schemas/CapsuleTitle'
+        text:
+          $ref: '#/components/schemas/CapsuleText'
+        recipientEmail:
+          type: string
+          format: email
+          maxLength: 254
+        scheduleDate:
+          allOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+          description: Deve estar pelo menos 1 minuto no futuro.
+
+    CapsuleFile:
+      type: object
+      required: [id, fileName, mimeType, fileSize, createdAt, downloadUrl, downloadUrlExpiresAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        fileName:
+          type: string
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, video/mp4, audio/mpeg, application/pdf]
+        fileSize:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+          description: Tamanho em bytes.
+        createdAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        downloadUrl:
+          type: string
+          format: uri
+          description: URL pre-assinada do armazenamento. Temporaria, nao deve ser persistida.
+        downloadUrlExpiresAt:
+          $ref: '#/components/schemas/UtcDateTime'
+
+    CapsuleSummary:
+      type: object
+      required: [id, title, recipientEmail, scheduleDate, status, sentAt, createdAt, fileCount]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        title:
+          type: string
+        recipientEmail:
+          type: string
+          format: email
+        scheduleDate:
+          $ref: '#/components/schemas/UtcDateTime'
+        status:
+          $ref: '#/components/schemas/CapsuleStatus'
+        sentAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+            - type: 'null'
+          description: Preenchido quando `status` e `SENT`.
+        createdAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        fileCount:
+          type: integer
+          minimum: 0
+          maximum: 5
+
+    Capsule:
+      type: object
+      required: [id, title, text, recipientEmail, scheduleDate, status, sentAt, createdAt, files]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        title:
+          type: string
+        text:
+          type: string
+        recipientEmail:
+          type: string
+          format: email
+        scheduleDate:
+          $ref: '#/components/schemas/UtcDateTime'
+        status:
+          $ref: '#/components/schemas/CapsuleStatus'
+        sentAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+            - type: 'null'
+          description: Preenchido quando `status` e `SENT`.
+        createdAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        files:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/CapsuleFile'
+
+    CapsuleList:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapsuleSummary'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+
+    PageMeta:
+      type: object
+      required: [page, pageSize, total, totalPages]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+
+    PublicCapsule:
+      type: object
+      required: [title, text, creatorName, sentAt, files]
+      properties:
+        title:
+          type: string
+        text:
+          type: string
+        creatorName:
+          type: string
+        sentAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapsuleFile'
+
+    ErrorCode:
+      type: string
+      enum:
+        - BAD_REQUEST
+        - UNAUTHORIZED
+        - INVALID_CREDENTIALS
+        - TOKEN_EXPIRED
+        - FORBIDDEN
+        - NOT_FOUND
+        - EMAIL_ALREADY_IN_USE
+        - CAPSULE_NOT_EDITABLE
+        - FILE_LIMIT_REACHED
+        - FILE_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
+        - VALIDATION_ERROR
+        - TOO_MANY_REQUESTS
+        - INTERNAL_ERROR
+      description: Codigo estavel para o cliente decidir o tratamento. A `message` e apenas informativa e pode mudar.
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: "Caminho do campo invalido, por exemplo `scheduleDate` ou `file`."
+        message:
+          type: string
+
+    Error:
+      type: object
+      required: [status, code, message]
+      properties:
+        status:
+          type: string
+          const: error
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+          description: Presente em `VALIDATION_ERROR` e `UNSUPPORTED_MEDIA_TYPE`.
+        stack:
+          type: string
+          description: Somente fora de producao, para depuracao. Nao faz parte do contrato.
+
+  examples:
+    User:
+      value:
+        id: 9b2f6c1e-3d4a-4e5b-8f6a-7b8c9d0e1f2a
+        name: Maria Souza
+        email: maria@exemplo.com
+        createdAt: '2026-09-28T18:59:12.000Z'
+    AuthTokens:
+      value:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YjJmNmMxZS0zZDRhLTRlNWItOGY2YS03YjhjOWQwZTFmMmEiLCJleHAiOjE3OTA2MzY4NTJ9.c2lnbmF0dXJl
+        refreshToken: rt_0a1b2c3d4e5f60718293a4b5c6d7e8f9
+        tokenType: Bearer
+        expiresIn: 900
+    AuthResponse:
+      value:
+        user:
+          id: 9b2f6c1e-3d4a-4e5b-8f6a-7b8c9d0e1f2a
+          name: Maria Souza
+          email: maria@exemplo.com
+          createdAt: '2026-09-28T18:59:12.000Z'
+        tokens:
+          accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5YjJmNmMxZS0zZDRhLTRlNWItOGY2YS03YjhjOWQwZTFmMmEiLCJleHAiOjE3OTA2MzY4NTJ9.c2lnbmF0dXJl
+          refreshToken: rt_0a1b2c3d4e5f60718293a4b5c6d7e8f9
+          tokenType: Bearer
+          expiresIn: 900
+    CapsuleFile:
+      value:
+        id: c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f
+        fileName: carta.pdf
+        mimeType: application/pdf
+        fileSize: 204800
+        createdAt: '2026-09-28T19:02:40.000Z'
+        downloadUrl: http://localhost:9000/capsula/capsules/3f1e2d4c/carta.pdf?X-Amz-Signature=def456
+        downloadUrlExpiresAt: '2026-09-28T20:02:40.000Z'
+    CapsuleScheduled:
+      value:
+        id: 3f1e2d4c-5b6a-4789-9abc-def012345678
+        title: Para mim daqui a um ano
+        text: Lembra do que voce prometeu hoje?
+        recipientEmail: maria@exemplo.com
+        scheduleDate: '2027-09-28T12:00:00.000Z'
+        status: SCHEDULED
+        sentAt: null
+        createdAt: '2026-09-28T18:59:12.000Z'
+        files:
+          - id: c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f
+            fileName: carta.pdf
+            mimeType: application/pdf
+            fileSize: 204800
+            createdAt: '2026-09-28T19:02:40.000Z'
+            downloadUrl: http://localhost:9000/capsula/capsules/3f1e2d4c/carta.pdf?X-Amz-Signature=def456
+            downloadUrlExpiresAt: '2026-09-28T20:02:40.000Z'
+    CapsuleSent:
+      value:
+        id: 7a8b9c0d-1e2f-4a3b-8c4d-5e6f7a8b9c0d
+        title: Formatura
+        text: Parabens pela conquista! Guardei isso para hoje.
+        recipientEmail: joao@exemplo.com
+        scheduleDate: '2026-09-20T09:00:00.000Z'
+        status: SENT
+        sentAt: '2026-09-20T09:00:05.123Z'
+        createdAt: '2026-01-15T14:30:00.000Z'
+        files: []
+    CapsuleNotEditableError:
+      value:
+        status: error
+        code: CAPSULE_NOT_EDITABLE
+        message: Apenas capsulas agendadas podem ser alteradas
+
+  responses:
+    BadRequest:
+      description: JSON malformado ou parametro com formato invalido.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            badRequest:
+              value:
+                status: error
+                code: BAD_REQUEST
+                message: Corpo da requisicao nao e um JSON valido
+    Unauthorized:
+      description: |
+        Token ausente/invalido (`UNAUTHORIZED`) ou access token expirado
+        (`TOKEN_EXPIRED`). Em `TOKEN_EXPIRED` o cliente deve chamar
+        `POST /api/auth/refresh` e repetir a requisicao.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            unauthorized:
+              value:
+                status: error
+                code: UNAUTHORIZED
+                message: Nao autorizado
+            tokenExpired:
+              value:
+                status: error
+                code: TOKEN_EXPIRED
+                message: Access token expirado
+    CapsuleNotFound:
+      description: Capsula inexistente ou de outro usuario (a API nao diferencia os casos).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            capsuleNotFound:
+              value:
+                status: error
+                code: NOT_FOUND
+                message: Capsula nao encontrada
+    CapsuleNotEditable:
+      description: A capsula nao esta mais `SCHEDULED`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            capsuleNotEditable:
+              $ref: '#/components/examples/CapsuleNotEditableError'
+    ValidationError:
+      description: Um ou mais campos invalidos. Cada problema vem em `details`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            validationError:
+              value:
+                status: error
+                code: VALIDATION_ERROR
+                message: Dados invalidos
+                details:
+                  - field: scheduleDate
+                    message: Deve ser uma data em UTC (sufixo Z) pelo menos 1 minuto no futuro
+                  - field: recipientEmail
+                    message: E-mail invalido
+    TooManyRequests:
+      description: Muitas tentativas. Aguarde o tempo indicado em `Retry-After`.
+      headers:
+        Retry-After:
+          description: Segundos ate poder tentar novamente.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            tooManyRequests:
+              value:
+                status: error
+                code: TOO_MANY_REQUESTS
+                message: Muitas tentativas. Tente novamente em instantes
+    InternalError:
+      description: Erro inesperado no servidor.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            internalError:
+              value:
+                status: error
+                code: INTERNAL_ERROR
+                message: Erro interno do servidor
