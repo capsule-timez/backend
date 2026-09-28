@@ -68,6 +68,8 @@ O `db:generate` cria o Prisma Client em `src/generated/prisma` (ignorado pelo gi
 | `npm run db:generate` | Gera o Prisma Client a partir do `prisma/schema.prisma` |
 | `npm run db:migrate` | Cria e aplica migrações no banco local (`prisma migrate dev`) |
 | `npm run db:studio` | Abre o Prisma Studio em `http://localhost:5555` |
+| `npm run docs:lint` | Valida o contrato OpenAPI (`docs/api/openapi.yaml`) |
+| `npm run docs:mock` | Sobe um mock da API a partir do contrato em `http://localhost:4010` |
 
 ### Variáveis de ambiente
 
@@ -79,6 +81,10 @@ As variáveis são carregadas do `.env` e validadas com Zod na inicialização (
 | `PORT` | `3000` | Porta HTTP do servidor |
 | `API_PREFIX` | `/api` | Prefixo das rotas de negócio |
 | `DATABASE_URL` | — (obrigatória) | URL de conexão do PostgreSQL (`postgresql://usuario:senha@host:porta/banco`). Deve refletir as variáveis `POSTGRES_*` do Docker Compose |
+
+### Contrato da API
+
+O contrato HTTP (endpoints, formatos de requisição e resposta, erros e datas) está em [`docs/api/`](./docs/api/README.md), com o [`openapi.yaml`](./docs/api/openapi.yaml) como fonte da verdade. Toda mudança de rota ou payload deve atualizar o contrato no mesmo PR.
 
 ### Health check
 
