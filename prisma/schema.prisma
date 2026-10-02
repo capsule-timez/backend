@@ -39,7 +39,8 @@ model Capsule {
   recipientEmail String        @map("recipient_email")
   scheduleDate   DateTime      @map("schedule_date")
   status         CapsuleStatus @default(SCHEDULED)
-  // Identifica a capsula no link de acesso enviado ao destinatario.
+  // Hash SHA-256 (hex) do token de acesso enviado no link ao destinatario.
+  // O texto puro nunca e persistido; ver src/lib/accessToken.ts.
   token          String        @unique
   sentAt         DateTime?     @map("sent_at")
   createdAt      DateTime      @default(now()) @map("created_at")
