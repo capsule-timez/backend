@@ -52,9 +52,10 @@ docker compose up -d
 ```bash
 npm install
 npm run db:generate
+npm run db:deploy
 ```
 
-O `db:generate` cria o Prisma Client em `src/generated/prisma` (ignorado pelo git). Ele precisa ser executado após a instalação e sempre que o `prisma/schema.prisma` mudar.
+O `db:generate` cria o Prisma Client em `src/generated/prisma` (ignorado pelo git). Ele precisa ser executado após a instalação e sempre que o `prisma/schema.prisma` mudar. O `db:deploy` aplica no banco as migrações versionadas em `prisma/migrations` que ainda não foram executadas.
 
 ### Scripts disponíveis
 
@@ -67,7 +68,10 @@ O `db:generate` cria o Prisma Client em `src/generated/prisma` (ignorado pelo gi
 | `npm run typecheck` | Verifica a tipagem sem gerar arquivos |
 | `npm run db:generate` | Gera o Prisma Client a partir do `prisma/schema.prisma` |
 | `npm run db:migrate` | Cria e aplica migrações no banco local (`prisma migrate dev`) |
+| `npm run db:deploy` | Aplica as migrações pendentes sem criar novas (`prisma migrate deploy`) |
 | `npm run db:studio` | Abre o Prisma Studio em `http://localhost:5555` |
+| `npm run docs:lint` | Valida o contrato OpenAPI (`docs/api/openapi.yaml`) |
+| `npm run docs:mock` | Sobe um mock da API a partir do contrato em `http://localhost:4010` |
 
 ### Variáveis de ambiente
 
@@ -79,6 +83,10 @@ As variáveis são carregadas do `.env` e validadas com Zod na inicialização (
 | `PORT` | `3000` | Porta HTTP do servidor |
 | `API_PREFIX` | `/api` | Prefixo das rotas de negócio |
 | `DATABASE_URL` | — (obrigatória) | URL de conexão do PostgreSQL (`postgresql://usuario:senha@host:porta/banco`). Deve refletir as variáveis `POSTGRES_*` do Docker Compose |
+
+### Contrato da API
+
+O contrato HTTP (endpoints, formatos de requisição e resposta, erros e datas) está em [`docs/api/`](./docs/api/README.md), com o [`openapi.yaml`](./docs/api/openapi.yaml) como fonte da verdade. Toda mudança de rota ou payload deve atualizar o contrato no mesmo PR.
 
 ### Health check
 
@@ -109,6 +117,20 @@ npm run db:migrate -- --name descricao_da_mudanca
 # 3. atualize o client (o Prisma 7 não faz isso automaticamente no migrate)
 npm run db:generate
 ```
+
+#### Modelo de dados
+
+Os modelos usam camelCase no Prisma e são mapeados (`@map`/`@@map`) para tabelas e colunas em snake_case no banco.
+
+| Tabela | Colunas | Observações |
+| --- | --- | --- |
+| `users` | `id`, `name`, `email`, `passhash`, `created_at` | `email` é único |
+| `capsules` | `id`, `id_creator`, `title_content`, `text_content`, `recipient_email`, `schedule_date`, `status`, `token`, `sent_at`, `created_at` | `id_creator` → `users.id`; `token` é único; `sent_at` é preenchido no envio |
+| `capsule_files` | `id`, `id_capsule`, `mime_type`, `file_name`, `file_size`, `object_key`, `created_at` | `id_capsule` → `capsules.id` com `ON DELETE CASCADE`; `file_size` em bytes; `object_key` é a chave do objeto no MinIO (única) |
+
+- `status` usa o enum `capsule_status` (`SCHEDULED`, `SENT`, `FAILED`) e começa como `SCHEDULED`.
+- O índice composto `capsules_status_schedule_date_idx` (`status`, `schedule_date`) atende a busca das cápsulas agendadas cuja data de entrega já chegou.
+- Todos os `id` são UUID gerados pelo Prisma Client.
 
 O client único fica em `src/lib/prisma.ts` e deve ser importado de lá (`import { prisma } from '../lib/prisma'`); não instancie `PrismaClient` em outros pontos. A URL de conexão é lida de `DATABASE_URL` em `prisma.config.ts` (CLI) e em `src/config/env.ts` (runtime).
 

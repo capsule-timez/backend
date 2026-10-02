@@ -15,6 +15,10 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "docs:lint": "npx -y @redocly/cli@2 lint docs/api/openapi.yaml",
+    "docs:mock": "npx -y @stoplight/prism-cli@5 mock docs/api/openapi.yaml -p 4010",
+    "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio"
   },
   "repository": {
