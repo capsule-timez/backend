@@ -6,6 +6,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   API_PREFIX: z.string().startsWith('/').default('/api'),
 
+  // Auth
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter pelo menos 32 caracteres'),
+  JWT_EXPIRES_IN: z.string().default('1h'),
+
   DATABASE_URL: z
     .string()
     .regex(/^postgres(ql)?:\/\//, 'deve comecar com postgresql:// ou postgres://'),

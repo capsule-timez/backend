@@ -3,9 +3,9 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: capsula
+      POSTGRES_USER: capsula
+      POSTGRES_PASSWORD: capsula_dev_password
     ports:
       - "${POSTGRES_PORT}:5432"
     volumes:
