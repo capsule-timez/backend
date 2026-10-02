@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { authRoutes } from './auth.routes';
 import { healthRoutes } from './health.routes';
 
 /**
@@ -14,3 +15,4 @@ rootRoutes.use(healthRoutes);
  * Novos modulos devem ser registrados aqui.
  */
 export const apiRoutes = Router();
+apiRoutes.use('/auth', authRoutes);
