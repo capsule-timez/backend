@@ -234,7 +234,7 @@ Exemplo — `POST /api/capsules`:
 | `text` | `textContent` | `text_content` |
 | `recipientEmail` | `recipientEmail` | `recipient_email` |
 | `scheduleDate` | `scheduleDate` | `schedule_date` |
-| — | `token` | `token` (nunca exposto ao criador; só vai no link do e-mail) |
+| — | `token` | `token` (hash SHA-256 do token de acesso; o texto puro nunca é persistido nem exposto ao criador, só vai no link do e-mail) |
 | — | `objectKey` (`CapsuleFile`) | `object_key` (nunca exposto; vira `downloadUrl`) |
 
 ## Anexos

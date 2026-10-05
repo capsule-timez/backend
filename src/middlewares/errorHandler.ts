@@ -1,14 +1,32 @@
 import type { NextFunction, Request, Response } from 'express';
 
 import { isProduction } from '../config/env';
-import { AppError } from '../lib/AppError';
+import { AppError, type ErrorCode } from '../lib/AppError';
 import { logger } from '../lib/logger';
 
 interface ErrorBody {
   status: 'error';
+  code: ErrorCode;
   message: string;
   details?: unknown;
   stack?: string;
+}
+
+/**
+ * O express.json() rejeita corpo malformado com um SyntaxError marcado com
+ * type 'entity.parse.failed'. Pelo contrato isso e 400, nao 500.
+ */
+function isMalformedJson(error: unknown): boolean {
+  return (
+    error instanceof SyntaxError &&
+    (error as SyntaxError & { type?: string }).type === 'entity.parse.failed'
+  );
+}
+
+function toAppError(error: unknown): AppError | undefined {
+  if (error instanceof AppError) return error;
+  if (isMalformedJson(error)) return new AppError('JSON malformado', 400);
+  return undefined;
 }
 
 /**
@@ -21,9 +39,10 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
-  const isAppError = error instanceof AppError;
-  const statusCode = isAppError ? error.statusCode : 500;
-  const message = isAppError ? error.message : 'Erro interno do servidor';
+  const appError = toAppError(error);
+  const statusCode = appError ? appError.statusCode : 500;
+  const code: ErrorCode = appError ? appError.code : 'INTERNAL_ERROR';
+  const message = appError ? appError.message : 'Erro interno do servidor';
 
   const logMessage = `${req.method} ${req.originalUrl} -> ${statusCode}`;
 
@@ -33,10 +52,10 @@ export function errorHandler(
     logger.warn(logMessage, message);
   }
 
-  const body: ErrorBody = { status: 'error', message };
+  const body: ErrorBody = { status: 'error', code, message };
 
-  if (isAppError && error.details !== undefined) {
-    body.details = error.details;
+  if (appError && appError.details !== undefined) {
+    body.details = appError.details;
   }
 
   if (!isProduction && error instanceof Error && error.stack) {

@@ -5,6 +5,7 @@ import { authMiddleware } from '../middlewares/authMiddleware';
 
 export const authRoutes = Router();
 
+authRoutes.post('/register', authController.register);
 authRoutes.post('/login', authController.login);
 
 // Rota de teste: exige um token válido no header Authorization.
