@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { test } from 'node:test';
+
+process.env.NODE_ENV = 'test';
+process.env.DATABASE_URL = 'postgresql://test:test@localhost:1/test';
+process.env.JWT_SECRET = 'test-only-secret-with-at-least-32-characters';
+process.env.API_PREFIX = '/api';
+
+test('capsule detail restricts access to the owner and returns safe attachment metadata', async (t) => {
+  const { prisma } = await import('../src/lib/prisma');
+  const { createApp } = await import('../src/app');
+  const { generateToken } = await import('../src/lib/token');
+  const id = '3f1e2d4c-5b6a-4789-9abc-def012345678';
+  const owner = 'a82e2d4c-5b6a-4789-9abc-def012345678';
+  const other = 'b82e2d4c-5b6a-4789-9abc-def012345678';
+  const date = new Date('2026-10-09T12:00:00Z');
+  const file = { id, fileName: 'carta.pdf', mimeType: 'application/pdf', fileSize: 123, createdAt: date };
+  let files = [file];
+  let queries = 0;
+  prisma.capsule.findFirst = (async (args: { where: { id: string; creatorId: string }; select: Record<string, unknown> }) => {
+    queries++;
+    assert.equal('token' in args.select, false);
+    assert.deepEqual(args.select.files, { select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true } });
+    if (args.where.id !== id || args.where.creatorId !== owner) return null;
+    return { id, titleContent: 'Carta', textContent: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date, status: 'SCHEDULED', sentAt: null, createdAt: date, token: 'secret-hash', files };
+  }) as typeof prisma.capsule.findFirst;
+  const server = createApp().listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(async () => { server.close(); await once(server, 'close'); await prisma.$disconnect(); });
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}/api/capsules`;
+  const get = (capsuleId: string, userId = owner) => fetch(`${base}/${capsuleId}`, { headers: { Authorization: `Bearer ${generateToken(userId)}` } });
+  const response = await get(id);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { id, title: 'Carta', text: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date.toISOString(), status: 'SCHEDULED', sentAt: null, createdAt: date.toISOString(), files: [{ ...file, createdAt: date.toISOString() }] });
+  files = [];
+  assert.deepEqual((await (await get(id)).json()).files, []);
+  const forbidden = await get(id, other);
+  const missing = await get(other);
+  assert.equal(forbidden.status, 404);
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await forbidden.json(), await missing.json());
+  const before = queries;
+  assert.equal((await fetch(`${base}/${id}`)).status, 401);
+  assert.equal((await fetch(`${base}/${id}`, { headers: { Authorization: 'Bearer invalid' } })).status, 401);
+  assert.equal((await get('invalid-id')).status, 404);
+  assert.equal(queries, before);
+});

@@ -9,3 +9,4 @@ export const capsuleRoutes = Router();
 capsuleRoutes.use(authMiddleware);
 
 capsuleRoutes.post('/', capsuleController.create);
+capsuleRoutes.get('/:id', capsuleController.detail);

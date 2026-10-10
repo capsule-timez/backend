@@ -374,13 +374,14 @@ paths:
       tags: [Capsules]
       operationId: getCapsule
       summary: Detalha uma capsula do usuario
+      description: Retorna os anexos sem dados internos de armazenamento. Capsula inexistente ou de outro usuario retorna 404. O hash do token nunca e retornado.
       responses:
         '200':
           description: Capsula encontrada.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Capsule'
+                $ref: '#/components/schemas/CapsuleDetail'
               examples:
                 capsuleScheduled:
                   $ref: '#/components/examples/CapsuleScheduled'
@@ -891,6 +892,55 @@ components:
           maxItems: 5
           items:
             $ref: '#/components/schemas/CapsuleFile'
+
+    CapsuleDetail:
+      type: object
+      required: [id, title, text, recipientEmail, scheduleDate, status, sentAt, createdAt, files]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        title:
+          type: string
+        text:
+          type: string
+        recipientEmail:
+          type: string
+          format: email
+        scheduleDate:
+          $ref: '#/components/schemas/UtcDateTime'
+        status:
+          $ref: '#/components/schemas/CapsuleStatus'
+        sentAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+            - type: 'null'
+          description: Preenchido quando `status` e `SENT`.
+        createdAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        files:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/CapsuleFileMetadata'
+
+    CapsuleFileMetadata:
+      type: object
+      required: [id, fileName, mimeType, fileSize, createdAt]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        fileName:
+          type: string
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, video/mp4, audio/mpeg, application/pdf]
+        fileSize:
+          type: integer
+          minimum: 1
+          maximum: 10485760
+          description: Tamanho em bytes.
+        createdAt:
+          $ref: '#/components/schemas/UtcDateTime'
 
     CapsuleList:
       type: object
