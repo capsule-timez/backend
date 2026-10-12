@@ -25,6 +25,7 @@ const envSchema = z.object({
   MINIO_API_PORT: z.coerce.number().int().positive().optional(),
   MINIO_CONSOLE_PORT: z.coerce.number().int().positive().optional(),
   RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().min(1).default('Capsula do Tempo <onboarding@resend.dev>'),
 });
 
 const parsed = envSchema.safeParse(process.env);
