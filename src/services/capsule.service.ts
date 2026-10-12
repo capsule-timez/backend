@@ -3,7 +3,7 @@ import { CapsuleStatus } from '../generated/prisma/enums';
 import { generateAccessToken } from '../lib/accessToken';
 import { AppError } from '../lib/AppError';
 import { prisma } from '../lib/prisma';
-import type { CreateCapsuleInput } from '../schemas/capsule.schema';
+import type { CreateCapsuleInput, ListCapsulesQuery } from '../schemas/capsule.schema';
 
 export interface CapsuleResponse {
   id: string;
@@ -15,6 +15,22 @@ export interface CapsuleResponse {
   sentAt: Date | null;
   createdAt: Date;
   files: Pick<CapsuleFile, 'id' | 'fileName' | 'mimeType' | 'fileSize' | 'createdAt'>[];
+}
+
+export interface CapsuleSummary {
+  id: string;
+  title: string;
+  recipientEmail: string;
+  scheduleDate: Date;
+  status: CapsuleStatus;
+  sentAt: Date | null;
+  createdAt: Date;
+  fileCount: number;
+}
+
+export interface CapsuleListResponse {
+  data: CapsuleSummary[];
+  meta: { page: number; pageSize: number; total: number; totalPages: number };
 }
 
 /**
@@ -36,6 +52,47 @@ function toCapsuleResponse(capsule: Omit<Capsule, 'token' | 'creatorId'>, files:
 }
 
 export const capsuleService = {
+  async list(userId: string, query: ListCapsulesQuery): Promise<CapsuleListResponse> {
+    const { status, page, pageSize } = query;
+    // O filtro por creatorId vem sempre do token, nunca da query string.
+    const where = { creatorId: userId, ...(status ? { status } : {}) };
+
+    const [total, capsules] = await prisma.$transaction([
+      prisma.capsule.count({ where }),
+      prisma.capsule.findMany({
+        where,
+        // id desempata datas iguais para a paginacao ser estavel.
+        orderBy: [{ scheduleDate: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          titleContent: true,
+          recipientEmail: true,
+          scheduleDate: true,
+          status: true,
+          sentAt: true,
+          createdAt: true,
+          _count: { select: { files: true } },
+        },
+      }),
+    ]);
+
+    return {
+      data: capsules.map((capsule) => ({
+        id: capsule.id,
+        title: capsule.titleContent,
+        recipientEmail: capsule.recipientEmail,
+        scheduleDate: capsule.scheduleDate,
+        status: capsule.status,
+        sentAt: capsule.sentAt,
+        createdAt: capsule.createdAt,
+        fileCount: capsule._count.files,
+      })),
+      meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
+    };
+  },
+
   async detail(userId: string, id: string): Promise<CapsuleResponse> {
     const capsule = await prisma.capsule.findFirst({
       where: { id, creatorId: userId },

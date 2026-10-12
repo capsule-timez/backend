@@ -8,5 +8,6 @@ export const capsuleRoutes = Router();
 // Todas as rotas de capsulas exigem Bearer token.
 capsuleRoutes.use(authMiddleware);
 
+capsuleRoutes.get('/', capsuleController.list);
 capsuleRoutes.post('/', capsuleController.create);
 capsuleRoutes.get('/:id', capsuleController.detail);
