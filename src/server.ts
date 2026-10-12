@@ -3,6 +3,10 @@ import type { Server } from 'node:http';
 import { app } from './app';
 import { env } from './config/env';
 import { logger } from './lib/logger';
+import {
+  startSendScheduledCapsulesJob,
+  stopSendScheduledCapsulesJob,
+} from './jobs/sendScheduledCapsules.job';
 import { connectDatabase, disconnectDatabase } from './lib/prisma';
 
 let server: Server | undefined;
@@ -19,12 +23,16 @@ async function bootstrap(): Promise<void> {
     logger.info(`Servidor iniciado em http://localhost:${env.PORT} (${env.NODE_ENV})`);
     logger.info(`Health check: http://localhost:${env.PORT}/health`);
   });
+
+  startSendScheduledCapsulesJob();
 }
 
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} recebido, encerrando servidor...`);
 
   let exitCode = 0;
+
+  await stopSendScheduledCapsulesJob();
 
   if (server) {
     const httpServer = server;
