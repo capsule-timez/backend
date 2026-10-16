@@ -135,4 +135,27 @@ export const capsuleService = {
 
     return toCapsuleResponse(capsule);
   },
+
+  async remove(userId: string, id: string): Promise<void> {
+    // Delete condicional e atomico: evita excluir uma capsula que o job de envio
+    // marcou como SENT entre a checagem e a exclusao. Os CapsuleFile saem junto
+    // por onDelete: Cascade.
+    const { count } = await prisma.capsule.deleteMany({
+      where: { id, creatorId: userId, status: CapsuleStatus.SCHEDULED },
+    });
+    if (count > 0) return;
+
+    // Nada removido: distingue inexistente/de outro usuario (404) de ja enviada (409).
+    const exists = await prisma.capsule.findFirst({
+      where: { id, creatorId: userId },
+      select: { id: true },
+    });
+    if (!exists) throw AppError.notFound('Capsula nao encontrada.');
+    throw new AppError(
+      'Apenas capsulas agendadas podem ser excluidas. Esta capsula ja foi processada.',
+      409,
+      undefined,
+      'CAPSULE_NOT_EDITABLE',
+    );
+  },
 };
