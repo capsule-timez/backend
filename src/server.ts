@@ -8,6 +8,7 @@ import {
   stopSendScheduledCapsulesJob,
 } from './jobs/sendScheduledCapsules.job';
 import { connectDatabase, disconnectDatabase } from './lib/prisma';
+import { ensureBucket } from './lib/storage';
 
 let server: Server | undefined;
 
@@ -17,6 +18,13 @@ async function bootstrap(): Promise<void> {
   } catch (error) {
     logger.error('Falha ao conectar ao banco de dados', error);
     process.exit(1);
+  }
+
+  try {
+    await ensureBucket();
+  } catch (error) {
+    // Nao derruba a API: o upload tenta de novo (e cria o bucket) na proxima requisicao.
+    logger.warn('MinIO indisponivel; o bucket sera verificado no primeiro upload', error);
   }
 
   server = app.listen(env.PORT, () => {
