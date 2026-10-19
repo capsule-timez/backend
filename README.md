@@ -83,6 +83,16 @@ As variáveis são carregadas do `.env` e validadas com Zod na inicialização (
 | `PORT` | `3000` | Porta HTTP do servidor |
 | `API_PREFIX` | `/api` | Prefixo das rotas de negócio |
 | `DATABASE_URL` | — (obrigatória) | URL de conexão do PostgreSQL (`postgresql://usuario:senha@host:porta/banco`). Deve refletir as variáveis `POSTGRES_*` do Docker Compose |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | — (necessárias para anexos) | Credenciais usadas pela API para falar com o MinIO |
+| `MINIO_ENDPOINT` | `localhost` | Host do MinIO (a porta vem de `MINIO_API_PORT`, padrão `9000`) |
+| `MINIO_USE_SSL` | `false` | `true` para acessar o MinIO por HTTPS |
+| `MINIO_BUCKET` | `capsula` | Bucket dos anexos; é criado automaticamente se não existir |
+| `RESEND_API_KEY` | — (opcional) | Chave da API do Resend. Sem ela, o job de envio das cápsulas não é iniciado |
+| `RESEND_FROM_EMAIL` | `Capsula do Tempo <onboarding@resend.dev>` | Remetente dos e-mails. O remetente padrão do Resend só entrega para o e-mail da sua conta; para outros destinatários, verifique um domínio |
+
+### Job de envio das cápsulas
+
+Junto com a API (`src/server.ts`), um cron roda a cada minuto (`src/jobs/sendScheduledCapsules.job.ts`): busca as cápsulas `SCHEDULED` com `schedule_date` menor ou igual ao momento atual, envia título e mensagem para o `recipient_email` pelo Resend e atualiza o status para `SENT` (com `sent_at`) ou `FAILED` se o envio der erro. Cada execução processa até 50 cápsulas; o restante fica para o minuto seguinte. Uma cápsula `FAILED` não é reenviada automaticamente.
 
 ### Contrato da API
 

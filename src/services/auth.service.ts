@@ -8,6 +8,15 @@ import { generateToken } from '../lib/token';
 const SALT_ROUNDS = 10;
 
 export const authService = {
+  async me(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, createdAt: true },
+    });
+    if (!user) throw AppError.unauthorized('Sessão inválida. Entre novamente.');
+    return user;
+  },
+
   async register(name: string, email: string, password: string) {
     const existing = await prisma.user.findUnique({ where: { email } });
 

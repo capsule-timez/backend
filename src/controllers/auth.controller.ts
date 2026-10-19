@@ -41,9 +41,8 @@ export const authController = {
     res.status(200).json({ token, user });
   },
 
-  // Rota de teste do authMiddleware: só responde se o token for válido.
-  // req.userId é preenchido pelo authMiddleware antes de chegar aqui.
-  me(req: Request, res: Response): void {
-    res.status(200).json({ userId: req.userId });
+  async me(req: Request, res: Response): Promise<void> {
+    const user = await authService.me(req.userId!);
+    res.status(200).json(user);
   },
 };

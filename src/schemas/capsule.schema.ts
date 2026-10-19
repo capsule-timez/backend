@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { CapsuleStatus } from '../generated/prisma/enums';
+
 /** Antecedencia minima entre a criacao e a entrega da capsula. */
 export const MIN_SCHEDULE_LEAD_MS = 60_000;
 
@@ -36,3 +38,24 @@ export const createCapsuleSchema = z.strictObject(
 );
 
 export type CreateCapsuleInput = z.infer<typeof createCapsuleSchema>;
+
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
+/** Query string da listagem: filtro opcional por status e paginacao. */
+export const listCapsulesQuerySchema = z.object({
+  status: z.enum(CapsuleStatus, { error: 'Deve ser SCHEDULED, SENT ou FAILED' }).optional(),
+  page: z.coerce
+    .number({ error: 'Deve ser um numero inteiro' })
+    .int('Deve ser um numero inteiro')
+    .min(1, 'Deve ser no minimo 1')
+    .default(1),
+  pageSize: z.coerce
+    .number({ error: 'Deve ser um numero inteiro' })
+    .int('Deve ser um numero inteiro')
+    .min(1, 'Deve ser no minimo 1')
+    .max(MAX_PAGE_SIZE, `Deve ser no maximo ${MAX_PAGE_SIZE}`)
+    .default(DEFAULT_PAGE_SIZE),
+});
+
+export type ListCapsulesQuery = z.infer<typeof listCapsulesQuerySchema>;

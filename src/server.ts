@@ -3,7 +3,12 @@ import type { Server } from 'node:http';
 import { app } from './app';
 import { env } from './config/env';
 import { logger } from './lib/logger';
+import {
+  startSendScheduledCapsulesJob,
+  stopSendScheduledCapsulesJob,
+} from './jobs/sendScheduledCapsules.job';
 import { connectDatabase, disconnectDatabase } from './lib/prisma';
+import { ensureBucket } from './lib/storage';
 
 let server: Server | undefined;
 
@@ -15,16 +20,27 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
+  try {
+    await ensureBucket();
+  } catch (error) {
+    // Nao derruba a API: o upload tenta de novo (e cria o bucket) na proxima requisicao.
+    logger.warn('MinIO indisponivel; o bucket sera verificado no primeiro upload', error);
+  }
+
   server = app.listen(env.PORT, () => {
     logger.info(`Servidor iniciado em http://localhost:${env.PORT} (${env.NODE_ENV})`);
     logger.info(`Health check: http://localhost:${env.PORT}/health`);
   });
+
+  startSendScheduledCapsulesJob();
 }
 
 async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} recebido, encerrando servidor...`);
 
   let exitCode = 0;
+
+  await stopSendScheduledCapsulesJob();
 
   if (server) {
     const httpServer = server;
