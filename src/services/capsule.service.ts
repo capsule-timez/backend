@@ -1,8 +1,13 @@
+import { randomUUID } from 'node:crypto';
+import path from 'node:path';
+
 import type { Capsule, CapsuleFile } from '../generated/prisma/client';
 import { CapsuleStatus } from '../generated/prisma/enums';
 import { generateAccessToken } from '../lib/accessToken';
 import { AppError } from '../lib/AppError';
 import { prisma } from '../lib/prisma';
+import { storage } from '../lib/storage';
+import { EXTENSIONS } from '../lib/upload';
 import type { CreateCapsuleInput, ListCapsulesQuery } from '../schemas/capsule.schema';
 
 export interface CapsuleResponse {
@@ -15,6 +20,24 @@ export interface CapsuleResponse {
   sentAt: Date | null;
   createdAt: Date;
   files: Pick<CapsuleFile, 'id' | 'fileName' | 'mimeType' | 'fileSize' | 'createdAt'>[];
+}
+
+export interface CapsuleFileResponse {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  createdAt: Date;
+  downloadUrl: string;
+  downloadUrlExpiresAt: Date;
+}
+
+export const MAX_FILES_PER_CAPSULE = 5;
+
+/** Multer entrega o nome em latin1; reinterpreta como UTF-8 e descarta qualquer caminho. */
+function sanitizeFileName(originalName: string): string {
+  const decoded = Buffer.from(originalName, 'latin1').toString('utf8');
+  return path.posix.basename(decoded.replaceAll('\\', '/')).slice(0, 255) || 'arquivo';
 }
 
 export interface CapsuleSummary {
@@ -112,6 +135,61 @@ export const capsuleService = {
     });
     if (!capsule) throw AppError.notFound('Capsula nao encontrada.');
     return toCapsuleResponse(capsule, capsule.files);
+  },
+
+  async addFile(userId: string, id: string, file: Express.Multer.File): Promise<CapsuleFileResponse> {
+    const capsule = await prisma.capsule.findFirst({
+      where: { id, creatorId: userId },
+      select: { status: true, _count: { select: { files: true } } },
+    });
+    if (!capsule) throw AppError.notFound('Capsula nao encontrada.');
+    if (capsule.status !== CapsuleStatus.SCHEDULED) {
+      throw new AppError(
+        'Apenas capsulas agendadas aceitam anexos.',
+        409,
+        undefined,
+        'CAPSULE_NOT_EDITABLE',
+      );
+    }
+    if (capsule._count.files >= MAX_FILES_PER_CAPSULE) {
+      throw new AppError(
+        `A capsula ja possui o limite de ${MAX_FILES_PER_CAPSULE} arquivos`,
+        409,
+        undefined,
+        'FILE_LIMIT_REACHED',
+      );
+    }
+
+    const objectKey = `capsules/${id}/${randomUUID()}${EXTENSIONS[file.mimetype] ?? ''}`;
+    await storage.putObject(objectKey, file.buffer, file.mimetype);
+
+    let record: CapsuleFile;
+    try {
+      record = await prisma.capsuleFile.create({
+        data: {
+          capsuleId: id,
+          mimeType: file.mimetype,
+          fileName: sanitizeFileName(file.originalname),
+          fileSize: file.size,
+          objectKey,
+        },
+      });
+    } catch (error) {
+      // Nao deixa objeto orfao no bucket se o registro nao foi gravado.
+      await storage.removeObject(objectKey).catch(() => undefined);
+      throw error;
+    }
+
+    const { url, expiresAt } = await storage.downloadUrl(objectKey);
+    return {
+      id: record.id,
+      fileName: record.fileName,
+      mimeType: record.mimeType,
+      fileSize: record.fileSize,
+      createdAt: record.createdAt,
+      downloadUrl: url,
+      downloadUrlExpiresAt: expiresAt,
+    };
   },
 
   async create(userId: string, input: CreateCapsuleInput): Promise<CapsuleResponse> {

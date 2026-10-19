@@ -24,6 +24,15 @@ const envSchema = z.object({
   MINIO_ROOT_PASSWORD: z.string().optional(),
   MINIO_API_PORT: z.coerce.number().int().positive().optional(),
   MINIO_CONSOLE_PORT: z.coerce.number().int().positive().optional(),
+  MINIO_ENDPOINT: z.string().min(1).default('localhost'),
+  MINIO_USE_SSL: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  MINIO_BUCKET: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, 'nome de bucket invalido')
+    .default('capsula'),
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().min(1).default('Capsula do Tempo <onboarding@resend.dev>'),
 });

@@ -11,4 +11,5 @@ capsuleRoutes.use(authMiddleware);
 capsuleRoutes.get('/', capsuleController.list);
 capsuleRoutes.post('/', capsuleController.create);
 capsuleRoutes.get('/:id', capsuleController.detail);
+capsuleRoutes.post('/:id/files', capsuleController.addFile);
 capsuleRoutes.delete('/:id', capsuleController.remove);
