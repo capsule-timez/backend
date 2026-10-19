@@ -40,6 +40,14 @@ export const capsuleController = {
     res.status(201).json(await capsuleService.addFile(req.userId, result.data, file));
   },
 
+  async remove(req: Request, res: Response): Promise<void> {
+    if (!req.userId) throw AppError.unauthorized('Token não fornecido.');
+    const result = z.uuid().safeParse(req.params.id);
+    if (!result.success) throw AppError.notFound('Capsula nao encontrada.');
+    await capsuleService.remove(req.userId, result.data);
+    res.status(204).end();
+  },
+
   async create(req: Request, res: Response): Promise<void> {
     // Preenchido pelo authMiddleware; a checagem so estreita o tipo.
     if (!req.userId) {
