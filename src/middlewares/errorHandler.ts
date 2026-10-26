@@ -44,7 +44,9 @@ export function errorHandler(
   const code: ErrorCode = appError ? appError.code : 'INTERNAL_ERROR';
   const message = appError ? appError.message : 'Erro interno do servidor';
 
-  const logMessage = `${req.method} ${req.originalUrl} -> ${statusCode}`;
+  const safeUrl = req.route?.path === '/capsules/:token'
+    ? '/public/capsules/[redacted]' : req.originalUrl;
+  const logMessage = `${req.method} ${safeUrl} -> ${statusCode}`;
 
   if (statusCode >= 500) {
     logger.error(logMessage, error);

@@ -25,6 +25,8 @@ const envSchema = z.object({
   MINIO_API_PORT: z.coerce.number().int().positive().optional(),
   MINIO_CONSOLE_PORT: z.coerce.number().int().positive().optional(),
   MINIO_ENDPOINT: z.string().min(1).default('localhost'),
+  MINIO_REGION: z.string().min(1).default('us-east-1'),
+  MINIO_PRESIGNED_URL_TTL_SECONDS: z.coerce.number().int().min(1).max(604800).default(900),
   MINIO_USE_SSL: z
     .enum(['true', 'false'])
     .default('false')

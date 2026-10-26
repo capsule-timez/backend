@@ -173,3 +173,11 @@ Rotas registradas na raiz (como `/health`) ficam em `rootRoutes`; rotas de negó
 ### Tratamento de erros
 
 Erros esperados devem ser lançados com `AppError` (`src/lib/AppError.ts`), que carrega o status HTTP. O `errorHandler` centraliza a resposta; qualquer outro erro vira `500` sem expor detalhes internos em produção. Com Express 5, erros em handlers `async` chegam ao middleware automaticamente — não é necessário `try/catch` em cada rota.
+
+### Abertura publica da capsula
+
+GET /api/public/capsules/{token} nao exige autenticacao. Busca o hash SHA-256 do token e retorna apenas capsulas SENT. Tokens inexistentes e capsulas nao enviadas retornam o mesmo 404. A resposta inclui titulo, texto, nome do criador, data de envio e arquivos com URLs assinadas, sem e-mails, hash ou campo objectKey. A chave do objeto integra o caminho da URL assinada do MinIO.
+
+MINIO_PRESIGNED_URL_TTL_SECONDS configura a validade das URLs (padrao 900 segundos; entre 1 e 604800). MINIO_REGION tem padrao us-east-1. O endpoint usa as demais configuracoes MinIO existentes; o host deve ser acessivel ao destinatario e o bucket deve permanecer privado. Respostas usam Cache-Control: no-store.
+
+Teste: npx tsx --test tests/publicCapsule.test.ts. O banco e simulado; as assinaturas sao geradas pelo SDK MinIO sem conexao externa.

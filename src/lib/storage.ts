@@ -5,7 +5,7 @@ import { AppError } from './AppError';
 import { logger } from './logger';
 
 /** Validade das URLs pre-assinadas de download, em segundos. */
-export const DOWNLOAD_URL_TTL_SECONDS = 3600;
+export const DOWNLOAD_URL_TTL_SECONDS = env.MINIO_PRESIGNED_URL_TTL_SECONDS;
 
 let client: Client | undefined;
 let bucketReady: Promise<void> | undefined;
@@ -20,6 +20,7 @@ function getClient(): Client {
     endPoint: env.MINIO_ENDPOINT,
     port: env.MINIO_API_PORT ?? 9000,
     useSSL: env.MINIO_USE_SSL,
+    region: env.MINIO_REGION,
     accessKey: env.MINIO_ROOT_USER,
     secretKey: env.MINIO_ROOT_PASSWORD,
   });
@@ -54,11 +55,14 @@ export const storage = {
   },
 
   async downloadUrl(objectKey: string): Promise<{ url: string; expiresAt: Date }> {
+    const issuedAt = new Date();
     const url = await getClient().presignedGetObject(
       env.MINIO_BUCKET,
       objectKey,
       DOWNLOAD_URL_TTL_SECONDS,
+      {},
+      issuedAt,
     );
-    return { url, expiresAt: new Date(Date.now() + DOWNLOAD_URL_TTL_SECONDS * 1000) };
+    return { url, expiresAt: new Date(Math.floor(issuedAt.getTime() / 1000) * 1000 + DOWNLOAD_URL_TTL_SECONDS * 1000) };
   },
 };
