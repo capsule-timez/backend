@@ -89,10 +89,13 @@ As variáveis são carregadas do `.env` e validadas com Zod na inicialização (
 | `MINIO_BUCKET` | `capsula` | Bucket dos anexos; é criado automaticamente se não existir |
 | `RESEND_API_KEY` | — (opcional) | Chave da API do Resend. Sem ela, o job de envio das cápsulas não é iniciado |
 | `RESEND_FROM_EMAIL` | `Capsula do Tempo <onboarding@resend.dev>` | Remetente dos e-mails. O remetente padrão do Resend só entrega para o e-mail da sua conta; para outros destinatários, verifique um domínio |
+| `WEB_URL` | `http://localhost:5173` | URL base do front-end web. O e-mail de entrega leva o link de abertura `${WEB_URL}/c/<token>` |
 
 ### Job de envio das cápsulas
 
-Junto com a API (`src/server.ts`), um cron roda a cada minuto (`src/jobs/sendScheduledCapsules.job.ts`): busca as cápsulas `SCHEDULED` com `schedule_date` menor ou igual ao momento atual, envia título e mensagem para o `recipient_email` pelo Resend e atualiza o status para `SENT` (com `sent_at`) ou `FAILED` se o envio der erro. Cada execução processa até 50 cápsulas; o restante fica para o minuto seguinte. Uma cápsula `FAILED` não é reenviada automaticamente.
+Junto com a API (`src/server.ts`), um cron roda a cada minuto (`src/jobs/sendScheduledCapsules.job.ts`): busca as cápsulas `SCHEDULED` com `schedule_date` menor ou igual ao momento atual e envia título, mensagem e o link de abertura (`${WEB_URL}/c/<token>`) para o `recipient_email` pelo Resend. O token é gerado no momento do envio com `generateAccessToken()`; só o hash SHA-256 é gravado na coluna `token` e o texto puro aparece apenas no e-mail, nunca em logs.
+
+Antes de enviar, cada cápsula é reservada com um update condicional (`status = SCHEDULED` → `SENT`, com `sent_at` e o hash do token). Só uma execução consegue fazer essa troca, então uma cápsula nunca é enviada duas vezes, mesmo que o job rode de novo (ou em outra instância) durante o envio. Se o envio der erro, o status vira `FAILED`. Cada execução processa até 50 cápsulas; o restante fica para o minuto seguinte. Uma cápsula `FAILED` não é reenviada automaticamente.
 
 ### Contrato da API
 

@@ -35,6 +35,10 @@ const envSchema = z.object({
     .default('capsula'),
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().min(1).default('Capsula do Tempo <onboarding@resend.dev>'),
+  WEB_URL: z
+    .url({ protocol: /^https?$/, message: 'deve ser uma URL http(s)' })
+    .default('http://localhost:5173')
+    .transform((value) => value.replace(/\/+$/, '')),
 });
 
 const parsed = envSchema.safeParse(process.env);

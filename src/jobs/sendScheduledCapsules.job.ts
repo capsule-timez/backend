@@ -1,6 +1,8 @@
 import cron, { type ScheduledTask } from 'node-cron';
 
+import { env } from '../config/env';
 import { CapsuleStatus } from '../generated/prisma/enums';
+import { generateAccessToken } from '../lib/accessToken';
 import { isEmailConfigured, sendEmail } from '../lib/email';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
@@ -26,11 +28,20 @@ export async function sendScheduledCapsules(): Promise<void> {
     });
 
     for (const capsule of capsules) {
+
+      const { token, hash } = generateAccessToken();
+
+      if (!(await claim(capsule.id, hash))) {
+        logger.warn(`Capsula ${capsule.id} nao esta mais agendada, ignorando`);
+        continue;
+      }
+
       try {
         await sendEmail({
           to: capsule.recipientEmail,
           subject: capsule.titleContent,
           text: `${capsule.titleContent}\n\n${capsule.textContent}`,
+          link: { label: 'Abrir capsula', url: buildOpenUrl(token) },
         });
       } catch (error) {
         logger.error(`Falha ao enviar a capsula ${capsule.id}`, error);
@@ -39,12 +50,29 @@ export async function sendScheduledCapsules(): Promise<void> {
       }
 
       logger.info(`Capsula ${capsule.id} enviada`);
-      await markAs(capsule.id, { status: CapsuleStatus.SENT, sentAt: new Date() });
     }
   } catch (error) {
     logger.error('Erro no job de envio de capsulas', error);
   } finally {
     running = false;
+  }
+}
+
+export function buildOpenUrl(token: string): string {
+  return `${env.WEB_URL}/c/${encodeURIComponent(token)}`;
+}
+
+
+async function claim(id: string, tokenHash: string): Promise<boolean> {
+  try {
+    const { count } = await prisma.capsule.updateMany({
+      where: { id, status: CapsuleStatus.SCHEDULED },
+      data: { status: CapsuleStatus.SENT, sentAt: new Date(), token: tokenHash },
+    });
+    return count === 1;
+  } catch (error) {
+    logger.error(`Falha ao reservar a capsula ${id} para envio`, error);
+    return false;
   }
 }
 
