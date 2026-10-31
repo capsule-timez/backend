@@ -7,8 +7,9 @@ process.env.DATABASE_URL = 'postgresql://test:test@localhost:1/test';
 process.env.JWT_SECRET = 'test-only-secret-with-at-least-32-characters';
 process.env.API_PREFIX = '/api';
 
-test('capsule detail restricts access to the owner and returns safe attachment metadata', async (t) => {
+test('capsule detail restricts access to the owner and returns attachments with signed download URLs', async (t) => {
   const { prisma } = await import('../src/lib/prisma');
+  const { storage } = await import('../src/lib/storage');
   const { createApp } = await import('../src/app');
   const { generateToken } = await import('../src/lib/token');
   const id = '3f1e2d4c-5b6a-4789-9abc-def012345678';
@@ -16,12 +17,14 @@ test('capsule detail restricts access to the owner and returns safe attachment m
   const other = 'b82e2d4c-5b6a-4789-9abc-def012345678';
   const date = new Date('2026-10-09T12:00:00Z');
   const file = { id, fileName: 'carta.pdf', mimeType: 'application/pdf', fileSize: 123, createdAt: date };
-  let files = [file];
+  const objectKey = `capsules/${id}/carta.pdf`;
+  let files = [{ ...file, objectKey }];
+  storage.downloadUrl = async (key) => ({ url: `http://minio/${key}?sig=1`, expiresAt: date });
   let queries = 0;
   prisma.capsule.findFirst = (async (args: { where: { id: string; creatorId: string }; select: Record<string, unknown> }) => {
     queries++;
     assert.equal('token' in args.select, false);
-    assert.deepEqual(args.select.files, { select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true } });
+    assert.deepEqual(args.select.files, { select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true } });
     if (args.where.id !== id || args.where.creatorId !== owner) return null;
     return { id, titleContent: 'Carta', textContent: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date, status: 'SCHEDULED', sentAt: null, createdAt: date, token: 'secret-hash', files };
   }) as typeof prisma.capsule.findFirst;
@@ -34,7 +37,7 @@ test('capsule detail restricts access to the owner and returns safe attachment m
   const get = (capsuleId: string, userId = owner) => fetch(`${base}/${capsuleId}`, { headers: { Authorization: `Bearer ${generateToken(userId)}` } });
   const response = await get(id);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { id, title: 'Carta', text: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date.toISOString(), status: 'SCHEDULED', sentAt: null, createdAt: date.toISOString(), files: [{ ...file, createdAt: date.toISOString() }] });
+  assert.deepEqual(await response.json(), { id, title: 'Carta', text: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date.toISOString(), status: 'SCHEDULED', sentAt: null, createdAt: date.toISOString(), files: [{ ...file, createdAt: date.toISOString(), downloadUrl: `http://minio/${objectKey}?sig=1`, downloadUrlExpiresAt: date.toISOString() }] });
   files = [];
   assert.deepEqual((await (await get(id)).json()).files, []);
   const forbidden = await get(id, other);

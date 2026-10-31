@@ -19,7 +19,7 @@ export interface CapsuleResponse {
   status: CapsuleStatus;
   sentAt: Date | null;
   createdAt: Date;
-  files: Pick<CapsuleFile, 'id' | 'fileName' | 'mimeType' | 'fileSize' | 'createdAt'>[];
+  files: CapsuleFileResponse[];
 }
 
 export interface CapsuleFileResponse {
@@ -129,12 +129,19 @@ export const capsuleService = {
         sentAt: true,
         createdAt: true,
         files: {
-          select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true },
+          select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true },
         },
       },
     });
     if (!capsule) throw AppError.notFound('Capsula nao encontrada.');
-    return toCapsuleResponse(capsule, capsule.files);
+    // objectKey fica so no servidor; o cliente recebe uma URL assinada temporaria.
+    const files = await Promise.all(
+      capsule.files.map(async ({ objectKey, ...file }) => {
+        const { url, expiresAt } = await storage.downloadUrl(objectKey);
+        return { ...file, downloadUrl: url, downloadUrlExpiresAt: expiresAt };
+      }),
+    );
+    return toCapsuleResponse(capsule, files);
   },
 
   async addFile(userId: string, id: string, file: Express.Multer.File): Promise<CapsuleFileResponse> {
