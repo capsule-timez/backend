@@ -18,15 +18,17 @@ test('PATCH capsule: partial updates, ownership, status, auth and contract valid
   const capsule = { id, titleContent: 'Original', textContent: 'Texto original',
     recipientEmail: 'old@example.com', scheduleDate: new Date(Date.now() + 86400000),
     status: 'SCHEDULED', sentAt: null, createdAt: new Date(), files: [] };
-  prisma.capsule.updateManyAndReturn = (async ({ where, data }: {
-    where: { id: string; creatorId: string; status: string }; data: object;
+  prisma.capsule.updateManyAndReturn = (async ({ where, data, select }: {
+    where: { id: string; creatorId: string; status: string }; data: object; select: Record<string, unknown>;
   }) => {
     writes++;
     assert.equal(where.status, 'SCHEDULED');
+    assert.equal('files' in select, false);
     if (!exists || where.id !== id || where.creatorId !== owner || capsule.status !== where.status) return [];
     Object.assign(capsule, data);
     return [{ ...capsule }];
   }) as typeof prisma.capsule.updateManyAndReturn;
+  prisma.capsuleFile.findMany = (async () => []) as typeof prisma.capsuleFile.findMany;
   prisma.capsule.findFirst = (async ({ where }: { where: { id: string; creatorId: string } }) =>
     exists && where.id === id && where.creatorId === owner ? { status: capsule.status } : null
   ) as typeof prisma.capsule.findFirst;
