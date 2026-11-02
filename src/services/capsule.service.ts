@@ -8,7 +8,7 @@ import { AppError } from '../lib/AppError';
 import { prisma } from '../lib/prisma';
 import { storage } from '../lib/storage';
 import { EXTENSIONS } from '../lib/upload';
-import type { CreateCapsuleInput, ListCapsulesQuery } from '../schemas/capsule.schema';
+import type { CreateCapsuleInput, ListCapsulesQuery, UpdateCapsuleInput } from '../schemas/capsule.schema';
 
 export interface CapsuleResponse {
   id: string;
@@ -75,6 +75,47 @@ function toCapsuleResponse(capsule: Omit<Capsule, 'token' | 'creatorId'>, files:
 }
 
 export const capsuleService = {
+  async update(id: string, creatorId: string, input: UpdateCapsuleInput) {
+    // Ownership and status are checked by the write itself to avoid a status race.
+    const [capsule] = await prisma.capsule.updateManyAndReturn({
+      where: { id, creatorId, status: 'SCHEDULED' },
+      data: {
+        ...(input.title !== undefined && { titleContent: input.title }),
+        ...(input.text !== undefined && { textContent: input.text }),
+        ...(input.recipientEmail !== undefined && { recipientEmail: input.recipientEmail }),
+        ...(input.scheduleDate !== undefined && { scheduleDate: input.scheduleDate }),
+      },
+      select: {
+        id: true, titleContent: true, textContent: true, recipientEmail: true,
+        scheduleDate: true, status: true, sentAt: true, createdAt: true,
+        files: {
+          select: { id: true, fileName: true, mimeType: true, fileSize: true,
+            createdAt: true, objectKey: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    if (!capsule) {
+      const existing = await prisma.capsule.findFirst({
+        where: { id, creatorId }, select: { status: true },
+      });
+      if (!existing) throw new AppError('Cápsula não encontrada.', 404, undefined, 'NOT_FOUND');
+      throw new AppError(
+        'A cápsula não pode ser editada: já foi enviada ou está com falha.',
+        409, undefined, 'CAPSULE_NOT_EDITABLE',
+      );
+    }
+    const { titleContent, textContent, files, ...rest } = capsule;
+    return {
+      ...rest, title: titleContent, text: textContent,
+      files: await Promise.all(files.map(async ({ objectKey, ...file }) => ({
+        ...file, ...await storage.downloadUrl(objectKey).then(({ url, expiresAt }) => ({
+          downloadUrl: url, downloadUrlExpiresAt: expiresAt,
+        })),
+      }))),
+    };
+  },
+
   async list(userId: string, query: ListCapsulesQuery): Promise<CapsuleListResponse> {
     const { status, page, pageSize } = query;
     // O filtro por creatorId vem sempre do token, nunca da query string.

@@ -59,3 +59,10 @@ export const listCapsulesQuerySchema = z.object({
 });
 
 export type ListCapsulesQuery = z.infer<typeof listCapsulesQuerySchema>;
+
+export const updateCapsuleSchema = createCapsuleSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  'Informe ao menos um campo.',
+);
+
+export type UpdateCapsuleInput = z.infer<typeof updateCapsuleSchema>;
