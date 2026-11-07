@@ -19,6 +19,20 @@ enum CapsuleStatus {
   @@map("capsule_status")
 }
 
+enum CapsuleType {
+  INDIVIDUAL
+  GROUP
+
+  @@map("capsule_type")
+}
+
+enum CapsuleMemberRole {
+  OWNER
+  MEMBER
+
+  @@map("capsule_member_role")
+}
+
 model User {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
@@ -26,32 +40,51 @@ model User {
   passhash  String
   createdAt DateTime @default(now()) @map("created_at")
 
-  capsules Capsule[]
+  capsules    Capsule[]
+  memberships CapsuleMember[]
 
   @@map("users")
 }
 
 model Capsule {
-  id             String        @id @default(uuid()) @db.Uuid
-  creatorId      String        @map("id_creator") @db.Uuid
-  titleContent   String        @map("title_content")
-  textContent    String        @map("text_content")
-  recipientEmail String        @map("recipient_email")
-  scheduleDate   DateTime      @map("schedule_date")
-  status         CapsuleStatus @default(SCHEDULED)
+  id                   String        @id @default(uuid()) @db.Uuid
+  creatorId            String        @map("id_creator") @db.Uuid
+  titleContent         String        @map("title_content")
+  textContent          String        @map("text_content")
+  recipientEmail       String        @map("recipient_email")
+  scheduleDate         DateTime      @map("schedule_date")
+  type                 CapsuleType   @default(INDIVIDUAL)
+  contributionDeadline DateTime?     @map("contribution_deadline")
+  inviteCode           String?       @unique @map("invite_code")
+  status               CapsuleStatus @default(SCHEDULED)
   // Hash SHA-256 (hex) do token de acesso enviado no link ao destinatario.
   // O texto puro nunca e persistido; ver src/lib/accessToken.ts.
-  token          String        @unique
-  sentAt         DateTime?     @map("sent_at")
-  createdAt      DateTime      @default(now()) @map("created_at")
+  token                String        @unique
+  sentAt               DateTime?     @map("sent_at")
+  createdAt            DateTime      @default(now()) @map("created_at")
 
-  creator User          @relation(fields: [creatorId], references: [id])
+  creator User            @relation(fields: [creatorId], references: [id])
   files   CapsuleFile[]
+  members CapsuleMember[]
 
   // Atende a busca do job de entrega: capsulas SCHEDULED com schedule_date vencida.
   @@index([status, scheduleDate])
   @@index([creatorId])
   @@map("capsules")
+}
+
+model CapsuleMember {
+  capsuleId String            @map("id_capsule") @db.Uuid
+  userId    String            @map("id_user") @db.Uuid
+  role      CapsuleMemberRole
+  joinedAt  DateTime          @default(now()) @map("joined_at")
+
+  capsule Capsule @relation(fields: [capsuleId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([capsuleId, userId])
+  @@index([userId])
+  @@map("capsule_members")
 }
 
 model CapsuleFile {

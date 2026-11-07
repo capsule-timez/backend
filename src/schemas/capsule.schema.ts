@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { CapsuleStatus } from '../generated/prisma/enums';
+import { CapsuleStatus, CapsuleType } from '../generated/prisma/enums';
 
 /** Antecedencia minima entre a criacao e a entrega da capsula. */
 export const MIN_SCHEDULE_LEAD_MS = 60_000;
@@ -13,7 +13,7 @@ function fieldError(message: string) {
     issue.input === undefined ? 'Campo obrigatorio' : message;
 }
 
-export const createCapsuleSchema = z.strictObject(
+const capsuleContentSchema = z.strictObject(
   {
     title: z
       .string({ error: fieldError('Deve ser um texto') })
@@ -36,6 +36,20 @@ export const createCapsuleSchema = z.strictObject(
   },
   { error: 'O corpo da requisicao deve ser um objeto JSON' },
 );
+
+export const createCapsuleSchema = capsuleContentSchema.extend({
+  type: z.enum(CapsuleType).default(CapsuleType.INDIVIDUAL),
+  contributionDeadline: z.iso.datetime().transform((value) => new Date(value)).optional(),
+}).refine(({ type, contributionDeadline, scheduleDate }) => {
+  if (type === CapsuleType.INDIVIDUAL) return contributionDeadline === undefined;
+  return contributionDeadline instanceof Date
+    && scheduleDate instanceof Date
+    && contributionDeadline.getTime() > Date.now()
+    && contributionDeadline < scheduleDate;
+}, {
+  path: ['contributionDeadline'],
+  message: 'Informe um prazo futuro e anterior à data de envio apenas para cápsulas em grupo.',
+});
 
 export type CreateCapsuleInput = z.infer<typeof createCapsuleSchema>;
 
@@ -60,7 +74,7 @@ export const listCapsulesQuerySchema = z.object({
 
 export type ListCapsulesQuery = z.infer<typeof listCapsulesQuerySchema>;
 
-export const updateCapsuleSchema = createCapsuleSchema.partial().refine(
+export const updateCapsuleSchema = capsuleContentSchema.partial().refine(
   (value) => Object.keys(value).length > 0,
   'Informe ao menos um campo.',
 );
