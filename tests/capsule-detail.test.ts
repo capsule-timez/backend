@@ -21,11 +21,11 @@ test('capsule detail restricts access to the owner and returns attachments with 
   let files = [{ ...file, objectKey }];
   storage.downloadUrl = async (key) => ({ url: `http://minio/${key}?sig=1`, expiresAt: date });
   let queries = 0;
-  prisma.capsule.findFirst = (async (args: { where: { id: string; creatorId: string }; select: Record<string, unknown> }) => {
+  prisma.capsule.findFirst = (async (args: { where: { id: string; OR: [{ creatorId: string }, unknown] }; select: Record<string, unknown> }) => {
     queries++;
     assert.equal('token' in args.select, false);
     assert.deepEqual(args.select.files, { select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true } });
-    if (args.where.id !== id || args.where.creatorId !== owner) return null;
+    if (args.where.id !== id || args.where.OR[0].creatorId !== owner) return null;
     return { id, titleContent: 'Carta', textContent: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date, status: 'SCHEDULED', sentAt: null, createdAt: date, token: 'secret-hash', files };
   }) as typeof prisma.capsule.findFirst;
   const server = createApp().listen(0, '127.0.0.1');

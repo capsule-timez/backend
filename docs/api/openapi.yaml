@@ -266,7 +266,7 @@ paths:
       tags: [Capsules]
       operationId: listCapsules
       summary: Lista as capsulas do usuario
-      description: Ordenadas por `scheduleDate` crescente.
+      description: Inclui capsulas criadas pelo usuario e grupos dos quais participa, em ordem crescente de `scheduleDate`.
       parameters:
         - name: status
           in: query
@@ -370,6 +370,52 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/capsules/join:
+    post:
+      tags: [Capsules]
+      operationId: joinCapsule
+      summary: Entra em uma capsula em grupo
+      description: Registra o usuario como participante. Repetir a solicitacao dentro do prazo preserva a participacao existente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [inviteCode]
+              properties:
+                inviteCode:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: Capsula e sua lista de participantes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapsuleDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Codigo de convite inexistente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: O prazo de contribuicao da capsula passou.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/capsules/{id}:
     parameters:
       - $ref: '#/components/parameters/CapsuleId'
@@ -377,7 +423,7 @@ paths:
       tags: [Capsules]
       operationId: getCapsule
       summary: Detalha uma capsula do usuario
-      description: Retorna os anexos sem dados internos de armazenamento. Capsula inexistente ou de outro usuario retorna 404. O hash do token nunca e retornado.
+      description: O criador e os participantes podem consultar a capsula. Apenas o OWNER recebe o codigo de convite. Uma capsula inexistente ou fora do alcance do usuario retorna 404.
       responses:
         '200':
           description: Capsula encontrada.
@@ -883,10 +929,25 @@ components:
         downloadUrlExpiresAt:
           $ref: '#/components/schemas/UtcDateTime'
 
+    CapsuleParticipant:
+      type: object
+      required: [name, role]
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [OWNER, MEMBER]
+
     CapsuleSummary:
       type: object
       required: [id, title, recipientEmail, scheduleDate, status, sentAt, createdAt, fileCount]
       properties:
+        participants:
+          type: array
+          description: Presente em capsulas em grupo.
+          items:
+            $ref: '#/components/schemas/CapsuleParticipant'
         id:
           $ref: '#/components/schemas/Uuid'
         title:
@@ -944,6 +1005,14 @@ components:
       type: object
       required: [id, title, text, recipientEmail, scheduleDate, status, sentAt, createdAt, files]
       properties:
+        participants:
+          type: array
+          description: Presente em capsulas em grupo.
+          items:
+            $ref: '#/components/schemas/CapsuleParticipant'
+        inviteCode:
+          type: string
+          description: Presente apenas para o OWNER da capsula em grupo.
         id:
           $ref: '#/components/schemas/Uuid'
         title:
@@ -1046,6 +1115,7 @@ components:
         - NOT_FOUND
         - EMAIL_ALREADY_IN_USE
         - CAPSULE_NOT_EDITABLE
+        - CONTRIBUTION_DEADLINE_PASSED
         - FILE_LIMIT_REACHED
         - FILE_TOO_LARGE
         - UNSUPPORTED_MEDIA_TYPE

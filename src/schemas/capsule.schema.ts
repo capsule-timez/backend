@@ -53,6 +53,10 @@ export const createCapsuleSchema = capsuleContentSchema.extend({
 
 export type CreateCapsuleInput = z.infer<typeof createCapsuleSchema>;
 
+export const joinCapsuleSchema = z.strictObject({
+  inviteCode: z.string().trim().min(1),
+});
+
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
