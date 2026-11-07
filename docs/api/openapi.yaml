@@ -325,7 +325,9 @@ paths:
       tags: [Capsules]
       operationId: createCapsule
       summary: Cria uma capsula agendada
-      description: A capsula nasce com `status` `SCHEDULED` e sem anexos. Anexos sao enviados depois em `POST /api/capsules/{id}/files`.
+      description: |
+        A capsula nasce com `status` `SCHEDULED` e sem anexos. Anexos sao enviados depois em `POST /api/capsules/{id}/files`.
+        O tipo padrao e `INDIVIDUAL`. Para `GROUP`, o criador entra como `OWNER` e a resposta inclui o prazo de contribuicao e o codigo de convite.
       requestBody:
         required: true
         content:
@@ -345,7 +347,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Capsule'
+                $ref: '#/components/schemas/CreatedCapsule'
               examples:
                 created:
                   value:
@@ -358,6 +360,7 @@ paths:
                     sentAt: null
                     createdAt: '2026-09-28T18:59:12.000Z'
                     files: []
+                    type: INDIVIDUAL
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -779,7 +782,25 @@ components:
       type: object
       additionalProperties: false
       required: [title, text, recipientEmail, scheduleDate]
+      if:
+        required: [type]
+        properties:
+          type:
+            const: GROUP
+      then:
+        required: [contributionDeadline]
+      else:
+        not:
+          required: [contributionDeadline]
       properties:
+        type:
+          type: string
+          enum: [INDIVIDUAL, GROUP]
+          default: INDIVIDUAL
+        contributionDeadline:
+          allOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+          description: Prazo exclusivo de grupo. Deve estar no futuro e ser anterior a scheduleDate.
         title:
           $ref: '#/components/schemas/CapsuleTitle'
         text:
@@ -792,6 +813,32 @@ components:
           allOf:
             - $ref: '#/components/schemas/UtcDateTime'
           description: Data de entrega. Deve estar pelo menos 1 minuto no futuro.
+
+    CreatedCapsule:
+      allOf:
+        - $ref: '#/components/schemas/Capsule'
+        - type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [INDIVIDUAL, GROUP]
+            contributionDeadline:
+              $ref: '#/components/schemas/UtcDateTime'
+            inviteCode:
+              type: string
+              description: Codigo unico de convite da capsula em grupo.
+          if:
+            properties:
+              type:
+                const: GROUP
+          then:
+            required: [contributionDeadline, inviteCode]
+          else:
+            not:
+              anyOf:
+                - required: [contributionDeadline]
+                - required: [inviteCode]
 
     UpdateCapsuleRequest:
       type: object

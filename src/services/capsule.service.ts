@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import type { Capsule, CapsuleFile } from '../generated/prisma/client';
-import { CapsuleStatus } from '../generated/prisma/enums';
+import { CapsuleMemberRole, CapsuleStatus, CapsuleType } from '../generated/prisma/enums';
 import { generateAccessToken } from '../lib/accessToken';
 import { AppError } from '../lib/AppError';
 import { prisma } from '../lib/prisma';
@@ -60,7 +60,10 @@ export interface CapsuleListResponse {
  * Monta a resposta campo a campo (lista branca), para que nem o hash do token
  * nem campos internos novos vazem para a API por engano.
  */
-function toCapsuleResponse(capsule: Omit<Capsule, 'token' | 'creatorId'>, files: CapsuleResponse['files'] = []): CapsuleResponse {
+function toCapsuleResponse(
+  capsule: Omit<Capsule, 'token' | 'creatorId' | 'type' | 'contributionDeadline' | 'inviteCode'>,
+  files: CapsuleResponse['files'] = [],
+): CapsuleResponse {
   return {
     id: capsule.id,
     title: capsule.titleContent,
@@ -240,12 +243,13 @@ export const capsuleService = {
     };
   },
 
-  async create(userId: string, input: CreateCapsuleInput): Promise<CapsuleResponse> {
+  async create(userId: string, input: CreateCapsuleInput) {
     // So o hash e persistido. O texto puro e descartado aqui: o e-mail sai
     // apenas na data de entrega, entao o job de envio deve gerar um token novo
     // com generateAccessToken(), gravar o hash dele e usar o texto puro so no
     // corpo do e-mail.
     const { hash } = generateAccessToken();
+    const group = input.type === CapsuleType.GROUP;
 
     const capsule = await prisma.capsule.create({
       data: {
@@ -256,10 +260,23 @@ export const capsuleService = {
         scheduleDate: input.scheduleDate,
         status: CapsuleStatus.SCHEDULED,
         token: hash,
+        type: input.type,
+        ...(group && {
+          contributionDeadline: input.contributionDeadline,
+          inviteCode: randomBytes(16).toString('hex'),
+          members: { create: { userId, role: CapsuleMemberRole.OWNER } },
+        }),
       },
     });
 
-    return toCapsuleResponse(capsule);
+    return {
+      ...toCapsuleResponse(capsule),
+      type: capsule.type,
+      ...(group && {
+        contributionDeadline: capsule.contributionDeadline,
+        inviteCode: capsule.inviteCode,
+      }),
+    };
   },
 
   async remove(userId: string, id: string): Promise<void> {
