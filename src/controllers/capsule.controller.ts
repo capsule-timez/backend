@@ -15,7 +15,7 @@ export const capsuleController = {
   },
 
   async update(req: Request, res: Response): Promise<void> {
-    if (!req.userId) throw AppError.unauthorized('Token n„o fornecido.');
+    if (!req.userId) throw AppError.unauthorized('Token n√£o fornecido.');
     const id = z.uuid().safeParse(req.params.id);
     if (!id.success) throw AppError.notFound('Capsula nao encontrada.');
     const input = parseOrThrow(updateCapsuleSchema, req.body);
