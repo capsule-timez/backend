@@ -4,10 +4,16 @@ import { z } from 'zod';
 import { AppError } from '../lib/AppError';
 import { receiveFile } from '../lib/upload';
 import { parseOrThrow } from '../lib/validate';
-import { createCapsuleSchema, listCapsulesQuerySchema, updateCapsuleSchema } from '../schemas/capsule.schema';
+import { createCapsuleSchema, joinCapsuleSchema, listCapsulesQuerySchema, updateCapsuleSchema } from '../schemas/capsule.schema';
 import { capsuleService } from '../services/capsule.service';
 
 export const capsuleController = {
+  async join(req: Request, res: Response): Promise<void> {
+    if (!req.userId) throw AppError.unauthorized('Token nao fornecido.');
+    const { inviteCode } = parseOrThrow(joinCapsuleSchema, req.body);
+    res.status(200).json(await capsuleService.join(req.userId, inviteCode));
+  },
+
   async update(req: Request, res: Response): Promise<void> {
     if (!req.userId) throw AppError.unauthorized('Token não fornecido.');
     const id = z.uuid().safeParse(req.params.id);

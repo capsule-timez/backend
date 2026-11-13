@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import path from 'node:path';
 
-import type { Capsule, CapsuleFile } from '../generated/prisma/client';
+import type { Capsule, CapsuleFile, Prisma } from '../generated/prisma/client';
 import { CapsuleMemberRole, CapsuleStatus, CapsuleType } from '../generated/prisma/enums';
 import { generateAccessToken } from '../lib/accessToken';
 import { AppError } from '../lib/AppError';
@@ -20,6 +20,26 @@ export interface CapsuleResponse {
   sentAt: Date | null;
   createdAt: Date;
   files: CapsuleFileResponse[];
+  participants?: CapsuleParticipant[];
+  inviteCode?: string;
+}
+
+interface CapsuleParticipant {
+  name: string;
+  role: CapsuleMemberRole;
+}
+
+const participantSelection = {
+  select: { userId: true, role: true, user: { select: { name: true } } },
+  orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
+} satisfies Prisma.CapsuleMemberFindManyArgs;
+
+function participants(members: { role: CapsuleMemberRole; user: { name: string } }[]): CapsuleParticipant[] {
+  return members.map(({ role, user }) => ({ name: user.name, role }));
+}
+
+function accessibleCapsules(userId: string) {
+  return { OR: [{ creatorId: userId }, { members: { some: { userId } } }] };
 }
 
 export interface CapsuleFileResponse {
@@ -49,6 +69,7 @@ export interface CapsuleSummary {
   sentAt: Date | null;
   createdAt: Date;
   fileCount: number;
+  participants?: CapsuleParticipant[];
 }
 
 export interface CapsuleListResponse {
@@ -78,6 +99,27 @@ function toCapsuleResponse(
 }
 
 export const capsuleService = {
+  async join(userId: string, inviteCode: string): Promise<CapsuleResponse> {
+    const capsule = await prisma.capsule.findUnique({
+      where: { inviteCode, type: CapsuleType.GROUP },
+      select: { id: true, contributionDeadline: true },
+    });
+    if (!capsule) throw AppError.notFound('Código de convite não encontrado.');
+    if (!capsule.contributionDeadline || capsule.contributionDeadline.getTime() <= Date.now()) {
+      throw new AppError(
+        'O prazo de contribuição desta cápsula já passou.',
+        409,
+        undefined,
+        'CONTRIBUTION_DEADLINE_PASSED',
+      );
+    }
+    await prisma.capsuleMember.createMany({
+      data: { capsuleId: capsule.id, userId, role: CapsuleMemberRole.MEMBER },
+      skipDuplicates: true,
+    });
+    return capsuleService.detail(userId, capsule.id);
+  },
+
   async update(id: string, creatorId: string, input: UpdateCapsuleInput) {
     // Ownership and status are checked by the write itself to avoid a status race.
     const [capsule] = await prisma.capsule.updateManyAndReturn({
@@ -121,8 +163,7 @@ export const capsuleService = {
 
   async list(userId: string, query: ListCapsulesQuery): Promise<CapsuleListResponse> {
     const { status, page, pageSize } = query;
-    // O filtro por creatorId vem sempre do token, nunca da query string.
-    const where = { creatorId: userId, ...(status ? { status } : {}) };
+    const where = { ...accessibleCapsules(userId), ...(status ? { status } : {}) };
 
     const [total, capsules] = await prisma.$transaction([
       prisma.capsule.count({ where }),
@@ -140,6 +181,8 @@ export const capsuleService = {
           status: true,
           sentAt: true,
           createdAt: true,
+          type: true,
+          members: participantSelection,
           _count: { select: { files: true } },
         },
       }),
@@ -155,6 +198,7 @@ export const capsuleService = {
         sentAt: capsule.sentAt,
         createdAt: capsule.createdAt,
         fileCount: capsule._count.files,
+        ...(capsule.type === CapsuleType.GROUP && { participants: participants(capsule.members) }),
       })),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
     };
@@ -162,7 +206,7 @@ export const capsuleService = {
 
   async detail(userId: string, id: string): Promise<CapsuleResponse> {
     const capsule = await prisma.capsule.findFirst({
-      where: { id, creatorId: userId },
+      where: { id, ...accessibleCapsules(userId) },
       select: {
         id: true,
         titleContent: true,
@@ -172,6 +216,9 @@ export const capsuleService = {
         status: true,
         sentAt: true,
         createdAt: true,
+        type: true,
+        inviteCode: true,
+        members: participantSelection,
         files: {
           select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true },
         },
@@ -185,7 +232,15 @@ export const capsuleService = {
         return { ...file, downloadUrl: url, downloadUrlExpiresAt: expiresAt };
       }),
     );
-    return toCapsuleResponse(capsule, files);
+    const group = capsule.type === CapsuleType.GROUP;
+    const owner = group && capsule.members.some(
+      (member) => member.userId === userId && member.role === CapsuleMemberRole.OWNER,
+    );
+    return {
+      ...toCapsuleResponse(capsule, files),
+      ...(group && { participants: participants(capsule.members) }),
+      ...(owner && capsule.inviteCode && { inviteCode: capsule.inviteCode }),
+    };
   },
 
   async addFile(userId: string, id: string, file: Express.Multer.File): Promise<CapsuleFileResponse> {

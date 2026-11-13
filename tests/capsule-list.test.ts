@@ -70,18 +70,19 @@ test('capsule list is scoped to the authenticated user, filterable, ordered and 
     ],
     meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
   });
-  assert.deepEqual(calls[0].where, { creatorId: owner });
+  const access = { OR: [{ creatorId: owner }, { members: { some: { userId: owner } } }] };
+  assert.deepEqual(calls[0].where, access);
   assert.deepEqual(calls[0].args.orderBy, [{ scheduleDate: 'asc' }, { id: 'asc' }]);
 
   // creatorId vem do token, mesmo que a query tente sobrescrever.
   await get(`?creatorId=${'b82e2d4c-5b6a-4789-9abc-def012345678'}`);
-  assert.deepEqual(calls[1].where, { creatorId: owner });
+  assert.deepEqual(calls[1].where, access);
 
   // Filtro por status e paginacao.
   total = 45;
   const filtered = await get('?status=SENT&page=2&pageSize=10');
   assert.equal(filtered.status, 200);
-  assert.deepEqual(calls[2].where, { creatorId: owner, status: 'SENT' });
+  assert.deepEqual(calls[2].where, { ...access, status: 'SENT' });
   assert.equal(calls[2].args.skip, 10);
   assert.equal(calls[2].args.take, 10);
   assert.deepEqual((await filtered.json()).meta, { page: 2, pageSize: 10, total: 45, totalPages: 5 });
