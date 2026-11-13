@@ -44,8 +44,12 @@ export function errorHandler(
   const code: ErrorCode = appError ? appError.code : 'INTERNAL_ERROR';
   const message = appError ? appError.message : 'Erro interno do servidor';
 
+  // Tokens de acesso e de convite nunca vao para o log.
   const safeUrl = req.route?.path === '/capsules/:token'
-    ? `${req.baseUrl}/capsules/[redacted]` : req.originalUrl;
+    ? `${req.baseUrl}/capsules/[redacted]`
+    : req.route?.path === '/:token/accept'
+      ? `${req.baseUrl}/[redacted]/accept`
+      : req.originalUrl;
   const logMessage = `${req.method} ${safeUrl} -> ${statusCode}`;
 
   if (statusCode >= 500) {
