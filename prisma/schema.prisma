@@ -40,8 +40,9 @@ model User {
   passhash  String
   createdAt DateTime @default(now()) @map("created_at")
 
-  capsules    Capsule[]
-  memberships CapsuleMember[]
+  capsules      Capsule[]
+  memberships   CapsuleMember[]
+  contributions CapsuleContribution[]
 
   @@map("users")
 }
@@ -63,9 +64,10 @@ model Capsule {
   sentAt               DateTime?     @map("sent_at")
   createdAt            DateTime      @default(now()) @map("created_at")
 
-  creator User            @relation(fields: [creatorId], references: [id])
-  files   CapsuleFile[]
-  members CapsuleMember[]
+  creator       User                  @relation(fields: [creatorId], references: [id])
+  files         CapsuleFile[]
+  members       CapsuleMember[]
+  contributions CapsuleContribution[]
 
   // Atende a busca do job de entrega: capsulas SCHEDULED com schedule_date vencida.
   @@index([status, scheduleDate])
@@ -87,19 +89,43 @@ model CapsuleMember {
   @@map("capsule_members")
 }
 
-model CapsuleFile {
+// Contribuicao de um participante numa capsula em grupo. Nao pode ser editada
+// nem removida depois de enviada; sai junto com a capsula (onDelete: Cascade).
+model CapsuleContribution {
   id        String   @id @default(uuid()) @db.Uuid
   capsuleId String   @map("id_capsule") @db.Uuid
-  mimeType  String   @map("mime_type")
-  fileName  String   @map("file_name")
-  // Tamanho em bytes.
-  fileSize  Int      @map("file_size")
-  // Chave do objeto no bucket do MinIO.
-  objectKey String   @unique @map("object_key")
+  authorId  String   @map("id_author") @db.Uuid
+  // Opcional quando a contribuicao tem ao menos uma imagem.
+  text      String?
   createdAt DateTime @default(now()) @map("created_at")
 
-  capsule Capsule @relation(fields: [capsuleId], references: [id], onDelete: Cascade)
+  capsule Capsule       @relation(fields: [capsuleId], references: [id], onDelete: Cascade)
+  author  User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  files   CapsuleFile[]
+
+  @@index([capsuleId, createdAt])
+  @@index([authorId])
+  @@map("capsule_contributions")
+}
+
+model CapsuleFile {
+  id             String   @id @default(uuid()) @db.Uuid
+  capsuleId      String   @map("id_capsule") @db.Uuid
+  // Preenchido quando a imagem pertence a uma contribuicao; nulo nos anexos
+  // da propria capsula.
+  contributionId String?  @map("id_contribution") @db.Uuid
+  mimeType       String   @map("mime_type")
+  fileName       String   @map("file_name")
+  // Tamanho em bytes.
+  fileSize       Int      @map("file_size")
+  // Chave do objeto no bucket do MinIO.
+  objectKey      String   @unique @map("object_key")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  capsule      Capsule              @relation(fields: [capsuleId], references: [id], onDelete: Cascade)
+  contribution CapsuleContribution? @relation(fields: [contributionId], references: [id], onDelete: Cascade)
 
   @@index([capsuleId])
+  @@index([contributionId])
   @@map("capsule_files")
 }
