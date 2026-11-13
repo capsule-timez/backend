@@ -1,5 +1,4 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import path from 'node:path';
 
 import type { Capsule, CapsuleFile, Prisma } from '../generated/prisma/client';
 import { CapsuleMemberRole, CapsuleStatus, CapsuleType } from '../generated/prisma/enums';
@@ -7,7 +6,7 @@ import { generateAccessToken } from '../lib/accessToken';
 import { AppError } from '../lib/AppError';
 import { prisma } from '../lib/prisma';
 import { storage } from '../lib/storage';
-import { EXTENSIONS } from '../lib/upload';
+import { EXTENSIONS, sanitizeFileName } from '../lib/upload';
 import type { CreateCapsuleInput, ListCapsulesQuery, UpdateCapsuleInput } from '../schemas/capsule.schema';
 
 export interface CapsuleResponse {
@@ -53,12 +52,6 @@ export interface CapsuleFileResponse {
 }
 
 export const MAX_FILES_PER_CAPSULE = 5;
-
-/** Multer entrega o nome em latin1; reinterpreta como UTF-8 e descarta qualquer caminho. */
-function sanitizeFileName(originalName: string): string {
-  const decoded = Buffer.from(originalName, 'latin1').toString('utf8');
-  return path.posix.basename(decoded.replaceAll('\\', '/')).slice(0, 255) || 'arquivo';
-}
 
 export interface CapsuleSummary {
   id: string;
