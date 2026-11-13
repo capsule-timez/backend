@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma';
 import { storage } from '../lib/storage';
 import { EXTENSIONS, sanitizeFileName } from '../lib/upload';
 import type { CreateCapsuleInput, ListCapsulesQuery, UpdateCapsuleInput } from '../schemas/capsule.schema';
+import { type ContributionResponse, contributionSelection, toContributionResponses } from './contribution.service';
 
 export interface CapsuleResponse {
   id: string;
@@ -20,6 +21,7 @@ export interface CapsuleResponse {
   createdAt: Date;
   files: CapsuleFileResponse[];
   participants?: CapsuleParticipant[];
+  contributions?: ContributionResponse[];
   inviteCode?: string;
 }
 
@@ -52,6 +54,9 @@ export interface CapsuleFileResponse {
 }
 
 export const MAX_FILES_PER_CAPSULE = 5;
+
+/** Anexos da propria capsula; as imagens das contribuicoes ficam de fora. */
+const OWN_FILES = { contributionId: null } satisfies Prisma.CapsuleFileWhereInput;
 
 export interface CapsuleSummary {
   id: string;
@@ -127,6 +132,7 @@ export const capsuleService = {
         id: true, titleContent: true, textContent: true, recipientEmail: true,
         scheduleDate: true, status: true, sentAt: true, createdAt: true,
         files: {
+          where: OWN_FILES,
           select: { id: true, fileName: true, mimeType: true, fileSize: true,
             createdAt: true, objectKey: true },
           orderBy: { createdAt: 'asc' },
@@ -176,7 +182,7 @@ export const capsuleService = {
           createdAt: true,
           type: true,
           members: participantSelection,
-          _count: { select: { files: true } },
+          _count: { select: { files: { where: OWN_FILES } } },
         },
       }),
     ]);
@@ -213,8 +219,10 @@ export const capsuleService = {
         inviteCode: true,
         members: participantSelection,
         files: {
+          where: OWN_FILES,
           select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true },
         },
+        contributions: contributionSelection,
       },
     });
     if (!capsule) throw AppError.notFound('Capsula nao encontrada.');
@@ -231,7 +239,10 @@ export const capsuleService = {
     );
     return {
       ...toCapsuleResponse(capsule, files),
-      ...(group && { participants: participants(capsule.members) }),
+      ...(group && {
+        participants: participants(capsule.members),
+        contributions: await toContributionResponses(capsule.contributions),
+      }),
       ...(owner && capsule.inviteCode && { inviteCode: capsule.inviteCode }),
     };
   },
@@ -239,7 +250,7 @@ export const capsuleService = {
   async addFile(userId: string, id: string, file: Express.Multer.File): Promise<CapsuleFileResponse> {
     const capsule = await prisma.capsule.findFirst({
       where: { id, creatorId: userId },
-      select: { status: true, _count: { select: { files: true } } },
+      select: { status: true, _count: { select: { files: { where: OWN_FILES } } } },
     });
     if (!capsule) throw AppError.notFound('Capsula nao encontrada.');
     if (capsule.status !== CapsuleStatus.SCHEDULED) {

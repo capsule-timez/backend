@@ -1,8 +1,10 @@
 import { hashAccessToken } from '../lib/accessToken';
 
+import { CapsuleType } from '../generated/prisma/enums';
 import { AppError } from '../lib/AppError';
 import { prisma } from '../lib/prisma';
 import { storage } from '../lib/storage';
+import { contributionSelection, toContributionResponses } from './contribution.service';
 
 export const publicCapsuleService = {
   async open(token: string) {
@@ -11,8 +13,11 @@ export const publicCapsuleService = {
       where: { token: tokenHash, status: 'SENT' },
       select: {
         titleContent: true, textContent: true, sentAt: true,
+        type: true,
         creator: { select: { name: true } },
+        contributions: contributionSelection,
         files: {
+          where: { contributionId: null },
           select: {
             id: true, fileName: true, mimeType: true, fileSize: true,
             createdAt: true, objectKey: true,
@@ -33,6 +38,9 @@ export const publicCapsuleService = {
           downloadUrl: url, downloadUrlExpiresAt: expiresAt,
         })),
       }))),
+      ...(capsule.type === CapsuleType.GROUP && {
+        contributions: await toContributionResponses(capsule.contributions),
+      }),
     };
   },
 };
