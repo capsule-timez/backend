@@ -579,6 +579,92 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/capsules/{id}/contributions:
+    parameters:
+      - $ref: '#/components/parameters/CapsuleId'
+    post:
+      tags: [Capsules]
+      operationId: createCapsuleContribution
+      summary: Envia uma contribuicao para a capsula em grupo
+      description: |
+        Apenas participantes (OWNER ou MEMBER), enquanto a capsula esta
+        `SCHEDULED` e antes do `contributionDeadline`. A contribuicao nao pode
+        ser editada nem removida depois de enviada.
+
+        Texto puro pode ir em JSON. Com imagens, use `multipart/form-data` com o
+        campo `text` (opcional) e ate **3 imagens** no campo `files` (repetido).
+        Cada imagem tem limite de 10 MB; tipos aceitos: `image/jpeg`,
+        `image/png`, `image/webp`. E obrigatorio enviar texto ou ao menos uma
+        imagem.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContributionRequest'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                  maxLength: 2000
+                files:
+                  type: array
+                  maxItems: 3
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Contribuicao registrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapsuleContribution'
+        '400':
+          description: Corpo malformado ou mais de 3 imagens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Capsula inexistente, individual ou o usuario nao participa dela.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Prazo de contribuicao encerrado ou capsula ja processada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                deadlinePassed:
+                  value:
+                    status: error
+                    code: CONTRIBUTION_DEADLINE_PASSED
+                    message: O prazo de contribuição desta cápsula já passou.
+        '413':
+          description: Imagem acima de 10 MB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: Tipo de arquivo nao permitido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/capsules/{id}/files/{fileId}:
     parameters:
       - $ref: '#/components/parameters/CapsuleId'
@@ -939,6 +1025,42 @@ components:
           type: string
           enum: [OWNER, MEMBER]
 
+    CreateContributionRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Espacos nas pontas sao removidos.
+
+    CapsuleContribution:
+      type: object
+      required: [id, author, text, createdAt, files]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        author:
+          type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+        text:
+          oneOf:
+            - type: string
+            - type: 'null'
+          description: Nulo quando a contribuicao tem so imagens.
+        createdAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        files:
+          type: array
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/CapsuleFile'
+
     CapsuleSummary:
       type: object
       required: [id, title, recipientEmail, scheduleDate, status, sentAt, createdAt, fileCount]
@@ -1013,6 +1135,11 @@ components:
         inviteCode:
           type: string
           description: Presente apenas para o OWNER da capsula em grupo.
+        contributions:
+          type: array
+          description: Presente em capsulas em grupo, em ordem de envio.
+          items:
+            $ref: '#/components/schemas/CapsuleContribution'
         id:
           $ref: '#/components/schemas/Uuid'
         title:
@@ -1103,6 +1230,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CapsuleFile'
+        contributions:
+          type: array
+          description: Presente em capsulas em grupo, em ordem de envio.
+          items:
+            $ref: '#/components/schemas/CapsuleContribution'
 
     ErrorCode:
       type: string

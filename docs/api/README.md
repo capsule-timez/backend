@@ -248,6 +248,20 @@ Exemplo — `POST /api/capsules`:
 - Tipos aceitos: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `audio/mpeg`, `application/pdf`.
 - `downloadUrl` expira em `downloadUrlExpiresAt`. Para renová-la, busque a cápsula de novo; não persista a URL.
 
+## Cápsula em grupo
+
+### Contribuições
+
+| Método | Rota | Corpo | Sucesso | Erros |
+| --- | --- | --- | --- | --- |
+| POST | `/api/capsules/{id}/contributions` | JSON `{ text }` ou `multipart/form-data` com `text` e `files` | `201 CapsuleContribution` | 400, 401, 404, 409 `CONTRIBUTION_DEADLINE_PASSED`, 413, 415, 422 |
+
+- Só participantes (OWNER ou MEMBER), com a cápsula `SCHEDULED` e antes do `contributionDeadline`. Quem não participa recebe 404.
+- Até **3 imagens por contribuição** (campo `files` repetido), 10 MB cada, `image/jpeg`, `image/png` ou `image/webp`.
+- É obrigatório enviar texto (até 2.000 caracteres) ou ao menos uma imagem.
+- Contribuições não podem ser editadas nem removidas.
+- O detalhe da cápsula em grupo e a abertura pública trazem `contributions` em ordem de envio. As imagens das contribuições não entram em `files` nem no limite de 5 anexos da cápsula.
+
 ## Acesso do destinatário
 
 | Método | Rota | Auth | Sucesso | Erros |

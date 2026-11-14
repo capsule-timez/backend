@@ -2,10 +2,18 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 
 import { AppError } from '../lib/AppError';
-import { receiveFile } from '../lib/upload';
+import { receiveFile, receiveFiles } from '../lib/upload';
 import { parseOrThrow } from '../lib/validate';
-import { createCapsuleSchema, joinCapsuleSchema, listCapsulesQuerySchema, updateCapsuleSchema } from '../schemas/capsule.schema';
+import {
+  createCapsuleSchema,
+  createContributionSchema,
+  joinCapsuleSchema,
+  listCapsulesQuerySchema,
+  MAX_IMAGES_PER_CONTRIBUTION,
+  updateCapsuleSchema,
+} from '../schemas/capsule.schema';
 import { capsuleService } from '../services/capsule.service';
+import { contributionService } from '../services/contribution.service';
 
 export const capsuleController = {
   async join(req: Request, res: Response): Promise<void> {
@@ -15,7 +23,7 @@ export const capsuleController = {
   },
 
   async update(req: Request, res: Response): Promise<void> {
-    if (!req.userId) throw AppError.unauthorized('Token n�o fornecido.');
+    if (!req.userId) throw AppError.unauthorized('Token não fornecido.');
     const id = z.uuid().safeParse(req.params.id);
     if (!id.success) throw AppError.notFound('Capsula nao encontrada.');
     const input = parseOrThrow(updateCapsuleSchema, req.body);
@@ -52,6 +60,23 @@ export const capsuleController = {
     if (!result.success) throw AppError.notFound('Capsula nao encontrada.');
     const file = await receiveFile(req, res);
     res.status(201).json(await capsuleService.addFile(req.userId, result.data, file));
+  },
+
+  async addContribution(req: Request, res: Response): Promise<void> {
+    if (!req.userId) throw AppError.unauthorized('Token não fornecido.');
+    const id = z.uuid().safeParse(req.params.id);
+    if (!id.success) throw AppError.notFound('Capsula nao encontrada.');
+
+    // Texto puro pode vir em JSON; com imagens, o corpo e multipart/form-data.
+    const { fields, files } = req.is('multipart/form-data')
+      ? await receiveFiles(req, res, 'files', MAX_IMAGES_PER_CONTRIBUTION)
+      : { fields: req.body as unknown, files: [] };
+    const input = parseOrThrow(createContributionSchema, fields);
+    if (!input.text && files.length === 0) {
+      throw AppError.validation([{ field: 'text', message: 'Envie um texto ou ao menos uma imagem' }]);
+    }
+
+    res.status(201).json(await contributionService.create(req.userId, id.data, input, files));
   },
 
   async remove(req: Request, res: Response): Promise<void> {

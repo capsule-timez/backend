@@ -84,3 +84,24 @@ export const updateCapsuleSchema = capsuleContentSchema.partial().refine(
 );
 
 export type UpdateCapsuleInput = z.infer<typeof updateCapsuleSchema>;
+
+/** Limite de imagens por contribuicao numa capsula em grupo. */
+export const MAX_IMAGES_PER_CONTRIBUTION = 3;
+
+/**
+ * Campos de texto da contribuicao (JSON ou multipart). O texto e opcional
+ * quando ha imagens; essa regra depende dos arquivos e fica no controller.
+ */
+export const createContributionSchema = z.strictObject(
+  {
+    text: z
+      .string({ error: fieldError('Deve ser um texto') })
+      .trim()
+      .max(2_000, 'Deve ter no maximo 2.000 caracteres')
+      .optional()
+      .transform((value) => value || undefined),
+  },
+  { error: 'O corpo da requisicao deve ser um objeto JSON' },
+);
+
+export type CreateContributionInput = z.infer<typeof createContributionSchema>;
