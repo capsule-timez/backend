@@ -40,6 +40,8 @@ tags:
     description: Capsulas do usuario autenticado.
   - name: Files
     description: Anexos das capsulas.
+  - name: Invites
+    description: Convites por e-mail para capsulas em grupo.
   - name: Public
     description: Acesso do destinatario pelo link recebido por e-mail.
 
@@ -699,6 +701,152 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/capsules/{id}/invites:
+    parameters:
+      - $ref: '#/components/parameters/CapsuleId'
+    post:
+      tags: [Invites]
+      operationId: createCapsuleInvites
+      summary: Convida pessoas por e-mail para a capsula em grupo
+      description: |
+        Apenas o OWNER, enquanto a capsula esta `SCHEDULED` e antes do
+        `contributionDeadline`. Cada e-mail recebe um link
+        `{WEB_URL}/convite/{token}` valido ate o fim do prazo de contribuicao.
+        So o hash SHA-256 do token e persistido.
+
+        E-mails sao normalizados (minusculas, sem espacos) e repetidos viram um
+        convite so. Convidar de novo o mesmo e-mail gera um token novo e
+        invalida o link anterior. Quem ja participa da capsula (pelo e-mail da
+        conta) nao recebe convite.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitesRequest'
+      responses:
+        '201':
+          description: Convites registrados, com o resultado de cada e-mail.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invites]
+                properties:
+                  invites:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InviteResult'
+              examples:
+                created:
+                  value:
+                    invites:
+                      - email: ana@example.com
+                        result: SENT
+                      - email: bruno@example.com
+                        result: ALREADY_MEMBER
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: O usuario participa da capsula, mas nao e o OWNER.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Capsula inexistente, individual ou o usuario nao participa dela.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Prazo de contribuicao encerrado ou capsula ja processada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Invites]
+      operationId: listCapsuleInvites
+      summary: Lista os convites da capsula em grupo
+      description: Apenas o OWNER. Ordenado do envio mais recente para o mais antigo.
+      responses:
+        '200':
+          description: Convites e seus status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CapsuleInvite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: O usuario participa da capsula, mas nao e o OWNER.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Capsula inexistente, individual ou o usuario nao participa dela.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/invites/{token}/accept:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        description: Token recebido no link do e-mail de convite.
+        schema:
+          type: string
+    post:
+      tags: [Invites]
+      operationId: acceptCapsuleInvite
+      summary: Aceita um convite e entra na capsula em grupo
+      description: |
+        Registra o usuario autenticado como MEMBER. O convite vale uma unica
+        vez e nao exige que o e-mail da conta seja o mesmo do convite: o link
+        funciona como credencial. Se o usuario ja participa, o convite e
+        consumido e a participacao existente e mantida.
+      responses:
+        '200':
+          description: Capsula e sua lista de participantes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapsuleDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Token invalido, expirado ou ja usado (a API nao diferencia os casos).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Prazo de contribuicao encerrado ou capsula ja processada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/public/capsules/{token}:
     parameters:
       - name: token
@@ -1235,6 +1383,54 @@ components:
           description: Presente em capsulas em grupo, em ordem de envio.
           items:
             $ref: '#/components/schemas/CapsuleContribution'
+
+    CreateInvitesRequest:
+      type: object
+      additionalProperties: false
+      required: [emails]
+      properties:
+        emails:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: string
+            format: email
+            maxLength: 254
+
+    InviteResult:
+      type: object
+      required: [email, result]
+      properties:
+        email:
+          type: string
+          format: email
+        result:
+          type: string
+          enum: [SENT, EMAIL_FAILED, ALREADY_MEMBER]
+          description: |
+            `SENT`: convite registrado e e-mail enviado. `EMAIL_FAILED`: convite
+            registrado, mas o e-mail falhou (pode ser reenviado).
+            `ALREADY_MEMBER`: a pessoa ja participa; nada foi feito.
+
+    CapsuleInvite:
+      type: object
+      required: [email, status, sentAt, expiresAt, acceptedAt]
+      properties:
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, EXPIRED]
+        sentAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        expiresAt:
+          $ref: '#/components/schemas/UtcDateTime'
+        acceptedAt:
+          oneOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+            - type: 'null'
 
     ErrorCode:
       type: string
