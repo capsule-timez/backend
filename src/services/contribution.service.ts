@@ -23,6 +23,8 @@ export const contributionSelection = {
     id: true,
     text: true,
     createdAt: true,
+    // So para o detalhe marcar quem ja contribuiu; nao vai para a resposta.
+    authorId: true,
     author: { select: { name: true } },
     files: {
       select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true },
@@ -39,7 +41,7 @@ export function toContributionResponses(
   contributions: SelectedContribution[],
 ): Promise<ContributionResponse[]> {
   return Promise.all(
-    contributions.map(async ({ files, ...contribution }) => ({
+    contributions.map(async ({ files, authorId: _authorId, ...contribution }) => ({
       ...contribution,
       files: await Promise.all(
         files.map(async ({ objectKey, ...file }) => {
