@@ -105,3 +105,27 @@ export const createContributionSchema = z.strictObject(
 );
 
 export type CreateContributionInput = z.infer<typeof createContributionSchema>;
+
+/** Limite de e-mails por requisicao de convite. */
+export const MAX_INVITES_PER_REQUEST = 20;
+
+export const createInvitesSchema = z.strictObject(
+  {
+    emails: z
+      .array(
+        z
+          .string({ error: 'Deve ser um e-mail valido' })
+          .trim()
+          .toLowerCase()
+          .pipe(z.email({ error: 'Deve ser um e-mail valido' }).max(254, 'Deve ter no maximo 254 caracteres')),
+        { error: fieldError('Deve ser uma lista de e-mails') },
+      )
+      .min(1, 'Informe ao menos um e-mail')
+      .max(MAX_INVITES_PER_REQUEST, `Informe no maximo ${MAX_INVITES_PER_REQUEST} e-mails`)
+      // E-mails repetidos (inclusive com caixa diferente) viram um convite so.
+      .transform((emails) => [...new Set(emails)]),
+  },
+  { error: 'O corpo da requisicao deve ser um objeto JSON' },
+);
+
+export type CreateInvitesInput = z.infer<typeof createInvitesSchema>;
