@@ -26,7 +26,7 @@ test('capsule detail restricts access to the owner and returns attachments with 
     assert.equal('token' in args.select, false);
     assert.deepEqual(args.select.files, { where: { contributionId: null }, select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true } });
     if (args.where.id !== id || args.where.OR[0].creatorId !== owner) return null;
-    return { id, titleContent: 'Carta', textContent: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date, status: 'SCHEDULED', sentAt: null, createdAt: date, token: 'secret-hash', files };
+    return { id, titleContent: 'Carta', textContent: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date, status: 'SCHEDULED', sentAt: null, createdAt: date, type: 'INDIVIDUAL', contributionDeadline: null, token: 'secret-hash', files };
   }) as typeof prisma.capsule.findFirst;
   const server = createApp().listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -37,7 +37,7 @@ test('capsule detail restricts access to the owner and returns attachments with 
   const get = (capsuleId: string, userId = owner) => fetch(`${base}/${capsuleId}`, { headers: { Authorization: `Bearer ${generateToken(userId)}` } });
   const response = await get(id);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { id, title: 'Carta', text: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date.toISOString(), status: 'SCHEDULED', sentAt: null, createdAt: date.toISOString(), files: [{ ...file, createdAt: date.toISOString(), downloadUrl: `http://minio/${objectKey}?sig=1`, downloadUrlExpiresAt: date.toISOString() }] });
+  assert.deepEqual(await response.json(), { id, title: 'Carta', text: 'Mensagem', recipientEmail: 'user@example.com', scheduleDate: date.toISOString(), status: 'SCHEDULED', sentAt: null, createdAt: date.toISOString(), type: 'INDIVIDUAL', files: [{ ...file, createdAt: date.toISOString(), downloadUrl: `http://minio/${objectKey}?sig=1`, downloadUrlExpiresAt: date.toISOString() }] });
   files = [];
   assert.deepEqual((await (await get(id)).json()).files, []);
   const forbidden = await get(id, other);
