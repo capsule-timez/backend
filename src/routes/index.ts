@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { authRoutes } from './auth.routes';
 import { capsuleRoutes } from './capsule.routes';
+import { inviteRoutes } from './invite.routes';
 import { publicCapsuleRoutes } from './publicCapsule.routes';
 import { healthRoutes } from './health.routes';
 
@@ -19,4 +20,5 @@ rootRoutes.use(healthRoutes);
 export const apiRoutes = Router();
 apiRoutes.use('/auth', authRoutes);
 apiRoutes.use('/capsules', capsuleRoutes);
+apiRoutes.use('/invites', inviteRoutes);
 apiRoutes.use('/public', publicCapsuleRoutes);

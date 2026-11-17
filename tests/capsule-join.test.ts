@@ -61,20 +61,24 @@ test('group invitations grant membership and protect the invitation code', {
   assert.deepEqual((await (await request('', member.id)).json()).data, []);
 
   const roster = [{ name: 'Owner', role: 'OWNER' }, { name: 'Member', role: 'MEMBER' }];
+  // O detalhe (inclusive o devolvido pelo join) marca quem ja contribuiu; a listagem nao.
+  const detailRoster = roster.map((person) => ({ ...person, hasContributed: false }));
   for (const joined of await Promise.all([join(member.id), join(member.id)])) {
     assert.equal(joined.status, 200);
     const capsule = await joined.json();
     assert.equal(capsule.id, id);
-    assert.deepEqual(capsule.participants, roster);
+    assert.deepEqual(capsule.participants, detailRoster);
     assert.equal('inviteCode' in capsule, false);
   }
   assert.equal(await prisma.capsuleMember.count({ where: { capsuleId: id } }), 2);
   assert.equal((await join(owner.id)).status, 200);
   const ownerDetail = await (await detail(owner.id)).json();
   assert.equal(ownerDetail.inviteCode, inviteCode);
-  assert.deepEqual(ownerDetail.participants, roster);
+  assert.deepEqual(ownerDetail.participants, detailRoster);
+  assert.equal(ownerDetail.type, 'GROUP');
+  assert.equal(typeof ownerDetail.contributionDeadline, 'string');
   const memberDetail = await (await detail(member.id)).json();
-  assert.deepEqual(memberDetail.participants, roster);
+  assert.deepEqual(memberDetail.participants, detailRoster);
   assert.equal('inviteCode' in memberDetail, false);
   assert.equal((await detail(outsider.id)).status, 404);
 

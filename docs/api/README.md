@@ -185,6 +185,14 @@ type Capsule = {
 
 // Item da listagem: sem `text` e `files`, com a contagem de anexos
 type CapsuleSummary = Omit<Capsule, 'text' | 'files'> & { fileCount: number };
+
+// Listagem e detalhe também trazem o tipo; em grupo, o prazo e os participantes.
+type CapsuleType = 'INDIVIDUAL' | 'GROUP';
+type CapsuleParticipant = {
+  name: string;
+  role: 'OWNER' | 'MEMBER';
+  hasContributed?: boolean;     // só no detalhe
+};
 ```
 
 ### Endpoints
@@ -261,6 +269,22 @@ Exemplo — `POST /api/capsules`:
 - É obrigatório enviar texto (até 2.000 caracteres) ou ao menos uma imagem.
 - Contribuições não podem ser editadas nem removidas.
 - O detalhe da cápsula em grupo e a abertura pública trazem `contributions` em ordem de envio. As imagens das contribuições não entram em `files` nem no limite de 5 anexos da cápsula.
+- Listagem e detalhe trazem `type` em toda cápsula e `contributionDeadline` nas cápsulas em grupo. No detalhe, cada participante traz `hasContributed`; quem é autor de cada contribuição não é exposto além do nome.
+
+### Convites por e-mail
+
+| Método | Rota | Corpo | Sucesso | Erros |
+| --- | --- | --- | --- | --- |
+| POST | `/api/capsules/{id}/invites` | `{ emails: string[] }` (1 a 20) | `201 { invites: InviteResult[] }` | 401, 403, 404, 409 `CONTRIBUTION_DEADLINE_PASSED`, 422 |
+| GET | `/api/capsules/{id}/invites` | — | `200 { data: CapsuleInvite[] }` | 401, 403, 404 |
+| POST | `/api/invites/{token}/accept` | — | `200 CapsuleDetail` | 401, 404, 409 |
+
+- Convidar e listar: só o OWNER. MEMBER recebe 403; quem não participa, 404.
+- O link enviado é `{WEB_URL}/convite/{token}` e vale até o `contributionDeadline`. Só o hash SHA-256 do token é persistido, como no token de acesso da cápsula.
+- `InviteResult.result`: `SENT`, `EMAIL_FAILED` (o convite foi registrado e pode ser reenviado) ou `ALREADY_MEMBER`.
+- Convidar de novo o mesmo e-mail gera um token novo e invalida o link anterior.
+- Aceitar exige login, mas não exige que o e-mail da conta seja o do convite. Cada convite vale uma vez; token inválido, expirado ou já usado retorna 404.
+- `CapsuleInvite.status`: `PENDING`, `ACCEPTED` ou `EXPIRED` (calculado pela validade).
 
 ## Acesso do destinatário
 

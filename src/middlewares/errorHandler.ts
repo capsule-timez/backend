@@ -30,6 +30,17 @@ function toAppError(error: unknown): AppError | undefined {
 }
 
 /**
+ * Tokens de acesso e de convite nunca vao para o log. A redacao olha a URL, e
+ * nao `req.route`, porque erros de middleware (ex.: 401 do auth) acontecem
+ * antes de a rota ser resolvida.
+ */
+export function redactUrl(url: string): string {
+  return url
+    .replace(/(\/public\/capsules\/)[^/?#]+/, '$1[redacted]')
+    .replace(/(\/invites\/)[^/?#]+(\/accept)/, '$1[redacted]$2');
+}
+
+/**
  * Tratamento centralizado de erros. O Express 5 encaminha rejeicoes de
  * handlers assincronos para ca automaticamente.
  */
@@ -44,9 +55,7 @@ export function errorHandler(
   const code: ErrorCode = appError ? appError.code : 'INTERNAL_ERROR';
   const message = appError ? appError.message : 'Erro interno do servidor';
 
-  const safeUrl = req.route?.path === '/capsules/:token'
-    ? `${req.baseUrl}/capsules/[redacted]` : req.originalUrl;
-  const logMessage = `${req.method} ${safeUrl} -> ${statusCode}`;
+  const logMessage = `${req.method} ${redactUrl(req.originalUrl)} -> ${statusCode}`;
 
   if (statusCode >= 500) {
     logger.error(logMessage, error);

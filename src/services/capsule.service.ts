@@ -20,6 +20,8 @@ export interface CapsuleResponse {
   sentAt: Date | null;
   createdAt: Date;
   files: CapsuleFileResponse[];
+  type?: CapsuleType;
+  contributionDeadline?: Date | null;
   participants?: CapsuleParticipant[];
   contributions?: ContributionResponse[];
   inviteCode?: string;
@@ -28,6 +30,8 @@ export interface CapsuleResponse {
 interface CapsuleParticipant {
   name: string;
   role: CapsuleMemberRole;
+  /** So no detalhe, que carrega as contribuicoes. */
+  hasContributed?: boolean;
 }
 
 const participantSelection = {
@@ -37,6 +41,21 @@ const participantSelection = {
 
 function participants(members: { role: CapsuleMemberRole; user: { name: string } }[]): CapsuleParticipant[] {
   return members.map(({ role, user }) => ({ name: user.name, role }));
+}
+
+function participantsWithContributions(
+  members: { userId: string; role: CapsuleMemberRole; user: { name: string } }[],
+  authorIds: Set<string>,
+): CapsuleParticipant[] {
+  return members.map(({ userId, role, user }) => ({ name: user.name, role, hasContributed: authorIds.has(userId) }));
+}
+
+/** O prazo so existe em capsula em grupo; a individual nao recebe o campo. */
+function groupFields(capsule: { type: CapsuleType; contributionDeadline: Date | null }) {
+  return {
+    type: capsule.type,
+    ...(capsule.type === CapsuleType.GROUP && { contributionDeadline: capsule.contributionDeadline }),
+  };
 }
 
 function accessibleCapsules(userId: string) {
@@ -67,6 +86,8 @@ export interface CapsuleSummary {
   sentAt: Date | null;
   createdAt: Date;
   fileCount: number;
+  type: CapsuleType;
+  contributionDeadline?: Date | null;
   participants?: CapsuleParticipant[];
 }
 
@@ -181,6 +202,7 @@ export const capsuleService = {
           sentAt: true,
           createdAt: true,
           type: true,
+          contributionDeadline: true,
           members: participantSelection,
           _count: { select: { files: { where: OWN_FILES } } },
         },
@@ -197,6 +219,7 @@ export const capsuleService = {
         sentAt: capsule.sentAt,
         createdAt: capsule.createdAt,
         fileCount: capsule._count.files,
+        ...groupFields(capsule),
         ...(capsule.type === CapsuleType.GROUP && { participants: participants(capsule.members) }),
       })),
       meta: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) },
@@ -216,6 +239,7 @@ export const capsuleService = {
         sentAt: true,
         createdAt: true,
         type: true,
+        contributionDeadline: true,
         inviteCode: true,
         members: participantSelection,
         files: {
@@ -237,10 +261,12 @@ export const capsuleService = {
     const owner = group && capsule.members.some(
       (member) => member.userId === userId && member.role === CapsuleMemberRole.OWNER,
     );
+    const authorIds = new Set(group ? capsule.contributions.map((contribution) => contribution.authorId) : []);
     return {
       ...toCapsuleResponse(capsule, files),
+      ...groupFields(capsule),
       ...(group && {
-        participants: participants(capsule.members),
+        participants: participantsWithContributions(capsule.members, authorIds),
         contributions: await toContributionResponses(capsule.contributions),
       }),
       ...(owner && capsule.inviteCode && { inviteCode: capsule.inviteCode }),
