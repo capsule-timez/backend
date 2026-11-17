@@ -220,7 +220,7 @@ test('group capsule invites: owner sends by e-mail, invitee accepts once, tokens
   assert.equal(accepted.headers.get('cache-control'), 'no-store');
   const detail = await accepted.json();
   assert.equal(detail.id, capsuleId);
-  assert.deepEqual(detail.participants.at(-1), { name: 'Invitee', role: 'MEMBER' });
+  assert.deepEqual(detail.participants.at(-1), { name: 'Invitee', role: 'MEMBER', hasContributed: false });
   assert.equal('inviteCode' in detail, false);
   assert.equal(members.get(invitee), 'MEMBER');
 
