@@ -1172,6 +1172,9 @@ components:
         role:
           type: string
           enum: [OWNER, MEMBER]
+        hasContributed:
+          type: boolean
+          description: Presente apenas no detalhe. Indica se a pessoa ja enviou ao menos uma contribuicao.
 
     CreateContributionRequest:
       type: object
@@ -1211,8 +1214,15 @@ components:
 
     CapsuleSummary:
       type: object
-      required: [id, title, recipientEmail, scheduleDate, status, sentAt, createdAt, fileCount]
+      required: [id, title, recipientEmail, scheduleDate, status, sentAt, createdAt, fileCount, type]
       properties:
+        type:
+          type: string
+          enum: [INDIVIDUAL, GROUP]
+        contributionDeadline:
+          allOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+          description: Presente apenas em capsulas em grupo.
         participants:
           type: array
           description: Presente em capsulas em grupo.
@@ -1273,8 +1283,15 @@ components:
 
     CapsuleDetail:
       type: object
-      required: [id, title, text, recipientEmail, scheduleDate, status, sentAt, createdAt, files]
+      required: [id, title, text, recipientEmail, scheduleDate, status, sentAt, createdAt, files, type]
       properties:
+        type:
+          type: string
+          enum: [INDIVIDUAL, GROUP]
+        contributionDeadline:
+          allOf:
+            - $ref: '#/components/schemas/UtcDateTime'
+          description: Presente apenas em capsulas em grupo.
         participants:
           type: array
           description: Presente em capsulas em grupo.
