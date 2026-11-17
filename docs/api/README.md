@@ -185,6 +185,14 @@ type Capsule = {
 
 // Item da listagem: sem `text` e `files`, com a contagem de anexos
 type CapsuleSummary = Omit<Capsule, 'text' | 'files'> & { fileCount: number };
+
+// Listagem e detalhe também trazem o tipo; em grupo, o prazo e os participantes.
+type CapsuleType = 'INDIVIDUAL' | 'GROUP';
+type CapsuleParticipant = {
+  name: string;
+  role: 'OWNER' | 'MEMBER';
+  hasContributed?: boolean;     // só no detalhe
+};
 ```
 
 ### Endpoints
@@ -261,6 +269,7 @@ Exemplo — `POST /api/capsules`:
 - É obrigatório enviar texto (até 2.000 caracteres) ou ao menos uma imagem.
 - Contribuições não podem ser editadas nem removidas.
 - O detalhe da cápsula em grupo e a abertura pública trazem `contributions` em ordem de envio. As imagens das contribuições não entram em `files` nem no limite de 5 anexos da cápsula.
+- Listagem e detalhe trazem `type` em toda cápsula e `contributionDeadline` nas cápsulas em grupo. No detalhe, cada participante traz `hasContributed`; quem é autor de cada contribuição não é exposto além do nome.
 
 ### Convites por e-mail
 
