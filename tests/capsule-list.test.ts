@@ -21,6 +21,8 @@ test('capsule list is scoped to the authenticated user, filterable, ordered and 
     status: 'SCHEDULED',
     sentAt: null,
     createdAt: date,
+    type: 'INDIVIDUAL',
+    contributionDeadline: null,
     token: 'secret-hash',
     _count: { files: 2 },
   };
@@ -66,6 +68,7 @@ test('capsule list is scoped to the authenticated user, filterable, ordered and 
         sentAt: null,
         createdAt: date.toISOString(),
         fileCount: 2,
+        type: 'INDIVIDUAL',
       },
     ],
     meta: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
@@ -86,6 +89,23 @@ test('capsule list is scoped to the authenticated user, filterable, ordered and 
   assert.equal(calls[2].args.skip, 10);
   assert.equal(calls[2].args.take, 10);
   assert.deepEqual((await filtered.json()).meta, { page: 2, pageSize: 10, total: 45, totalPages: 5 });
+
+  // Capsula em grupo: tipo, prazo e participantes, sem o prazo nas individuais.
+  const deadline = new Date('2026-12-01T12:00:00Z');
+  rows = [{
+    ...row,
+    type: 'GROUP',
+    contributionDeadline: deadline,
+    members: [
+      { userId: owner, role: 'OWNER', user: { name: 'Owner' } },
+      { userId: 'c82e2d4c-5b6a-4789-9abc-def012345678', role: 'MEMBER', user: { name: 'Member' } },
+    ],
+  } as typeof row];
+  const [group] = (await (await get()).json()).data;
+  assert.equal(group.type, 'GROUP');
+  assert.equal(group.contributionDeadline, deadline.toISOString());
+  assert.deepEqual(group.participants, [{ name: 'Owner', role: 'OWNER' }, { name: 'Member', role: 'MEMBER' }]);
+  rows = [row];
 
   // Sem capsulas: lista vazia, nao erro.
   rows = [];
