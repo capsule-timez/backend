@@ -40,6 +40,7 @@ test('group capsule contributions: participants only, before the deadline, immut
       return {
         id: capsuleId, titleContent: 'Grupo', textContent: 'Mensagem', recipientEmail: 'dest@example.com',
         scheduleDate: date, status: capsule.status, sentAt: null, createdAt: date, type: 'GROUP',
+        contributionDeadline: capsule.contributionDeadline,
         inviteCode: 'code', members: [
           { userId: owner, role: 'OWNER', user: { name: 'Owner' } },
           { userId: member, role: 'MEMBER', user: { name: 'Member' } },
@@ -62,6 +63,7 @@ test('group capsule contributions: participants only, before the deadline, immut
       id: args.data.id,
       text: args.data.text,
       createdAt: date,
+      authorId: args.data.authorId,
       author: { name: args.data.authorId === owner ? 'Owner' : 'Member' },
       files: args.data.files.create.map((file, index) => ({
         id: `file-${index}`, fileName: file.fileName, mimeType: file.mimeType,
@@ -158,6 +160,14 @@ test('group capsule contributions: participants only, before the deadline, immut
     ['Feliz aniversário!', 'Olha essa foto', null]);
   assert.equal(detail.contributions[1].files.length, 2);
   assert.equal(JSON.stringify(detail).includes('objectKey'), false);
+  assert.equal(JSON.stringify(detail).includes('authorId'), false);
+  assert.equal(detail.type, 'GROUP');
+  assert.equal(detail.contributionDeadline, capsule.contributionDeadline?.toISOString());
+  // Só o participante contribuiu; o dono ainda não.
+  assert.deepEqual(detail.participants, [
+    { name: 'Owner', role: 'OWNER', hasContributed: false },
+    { name: 'Member', role: 'MEMBER', hasContributed: true },
+  ]);
 
   // Contribuicoes nao podem ser editadas nem removidas.
   for (const method of ['PATCH', 'PUT', 'DELETE']) {
@@ -199,7 +209,7 @@ test('public capsule opening includes contributions only for group capsules', as
       titleContent: 'Grupo', textContent: 'Mensagem', sentAt: date, type,
       creator: { name: 'Owner' }, files: [],
       contributions: [{
-        id: 'contribution-1', text: 'Parabéns', createdAt: date, author: { name: 'Member' },
+        id: 'contribution-1', text: 'Parabéns', createdAt: date, authorId: 'b82e2d4c-5b6a-4789-9abc-def012345678', author: { name: 'Member' },
         files: [{ id: 'f1', fileName: 'a.png', mimeType: 'image/png', fileSize: 10, createdAt: date, objectKey: 'k/a.png' }],
       }],
     };
