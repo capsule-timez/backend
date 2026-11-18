@@ -149,15 +149,10 @@ export const capsuleService = {
         ...(input.recipientEmail !== undefined && { recipientEmail: input.recipientEmail }),
         ...(input.scheduleDate !== undefined && { scheduleDate: input.scheduleDate }),
       },
+      // updateManyAndReturn nao aceita relacoes no select; os anexos vem na consulta abaixo.
       select: {
         id: true, titleContent: true, textContent: true, recipientEmail: true,
         scheduleDate: true, status: true, sentAt: true, createdAt: true,
-        files: {
-          where: OWN_FILES,
-          select: { id: true, fileName: true, mimeType: true, fileSize: true,
-            createdAt: true, objectKey: true },
-          orderBy: { createdAt: 'asc' },
-        },
       },
     });
     if (!capsule) {
@@ -170,7 +165,12 @@ export const capsuleService = {
         409, undefined, 'CAPSULE_NOT_EDITABLE',
       );
     }
-    const { titleContent, textContent, files, ...rest } = capsule;
+    const files = await prisma.capsuleFile.findMany({
+      where: { capsuleId: id, ...OWN_FILES },
+      select: { id: true, fileName: true, mimeType: true, fileSize: true, createdAt: true, objectKey: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const { titleContent, textContent, ...rest } = capsule;
     return {
       ...rest, title: titleContent, text: textContent,
       files: await Promise.all(files.map(async ({ objectKey, ...file }) => ({
